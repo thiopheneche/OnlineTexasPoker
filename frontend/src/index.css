@@ -1,0 +1,261 @@
+:root {
+  --bg-dark: #121212;
+  --bg-surface: #1e1e1e;
+  --bg-table: #0d4a30;
+  --primary: #bb86fc;
+  --text-main: #e0e0e0;
+  --text-muted: #a0a0a0;
+  --accent: #03dac6;
+  --danger: #cf6679;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', system-ui, sans-serif;
+  background-color: var(--bg-dark);
+  color: var(--text-main);
+  box-sizing: border-box;
+}
+
+.flex-center {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  width: 100vw;
+}
+
+.app-main {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.poker-table-container {
+  width: 90%;
+  max-width: 1100px;
+  height: 85vh;
+  background: var(--bg-surface);
+  border-radius: 16px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 30px;
+  background: rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 1.6rem;
+  color: var(--primary);
+  letter-spacing: 1px;
+}
+
+.turn-indicator .active-turn {
+  padding: 8px 18px;
+  background: rgba(3, 218, 198, 0.15);
+  color: var(--accent);
+  border-radius: 20px;
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.turn-indicator .waiting {
+  color: var(--text-muted);
+}
+
+.game-board {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 30px;
+  background-image: radial-gradient(circle at center, var(--bg-table) 0%, #071f14 100%);
+  position: relative;
+}
+
+.opponents {
+  display: flex;
+  gap: 15px;
+  justify-content: center;
+  margin-bottom: 30px;
+}
+
+.opponent-card {
+  background: rgba(0, 0, 0, 0.5);
+  padding: 10px 20px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.95rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-main);
+}
+
+.opponent-card .badge {
+  background: var(--accent);
+  color: #000;
+  font-size: 0.75rem;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-weight: bold;
+}
+
+.community-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+}
+
+.community-area h3 {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 1.2rem;
+  font-weight: 500;
+}
+
+.pot-amount {
+  color: #ffd700;
+  font-weight: bold;
+  font-size: 1.5rem;
+  text-shadow: 0 0 10px rgba(255, 215, 0, 0.3);
+}
+
+.phase-badge {
+  background: rgba(0,0,0,0.6);
+  padding: 6px 18px;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  font-weight: bold;
+  letter-spacing: 1px;
+}
+
+.cards-row {
+  display: flex;
+  gap: 12px;
+  min-height: 130px;
+  align-items: center;
+}
+
+.card {
+  width: 90px;
+  height: 130px;
+  background: white;
+  color: #111;
+  border-radius: 10px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 2.2rem;
+  font-weight: bold;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
+  user-select: none;
+  transition: transform 0.2s;
+}
+
+.card:hover {
+  transform: translateY(-5px);
+}
+
+.card.red {
+  color: #e53935;
+}
+
+.card.empty {
+  background: rgba(0,0,0,0.25);
+  border: 2px dashed rgba(255,255,255,0.2);
+  color: rgba(255,255,255,0.4);
+  font-size: 0.95rem;
+  box-shadow: none;
+}
+
+.card.empty:hover {
+  transform: none;
+}
+
+.my-area {
+  margin-top: auto;
+  background: rgba(0, 0, 0, 0.7);
+  padding: 25px 30px;
+  border-radius: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 -5px 20px rgba(0,0,0,0.3);
+}
+
+.my-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.my-info h3 {
+  margin: 0 0 8px 0;
+  color: var(--primary);
+  font-size: 1.3rem;
+  font-weight: 600;
+}
+
+.my-chips {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--text-muted);
+}
+
+.my-hole-cards {
+  display: flex;
+  gap: 12px;
+}
+
+.actions {
+  display: flex;
+  gap: 16px;
+}
+
+.actions button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border: none;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+}
+
+.btn-start {
+  background: var(--primary);
+  color: #000;
+}
+.btn-start:hover {
+  background: #cba4fd;
+  transform: translateY(-2px);
+}
+
+.btn-bet {
+  background: var(--accent);
+  color: #000;
+}
+.btn-bet:hover {
+  background: #3cebda;
+  transform: translateY(-2px);
+}
