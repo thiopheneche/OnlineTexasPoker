@@ -34,12 +34,12 @@ export type GameState = {
 
 type Props = {
   tableId: string;
+  clientId: string;
   onLeave: () => void;
 };
 
-export const PokerTable: React.FC<Props> = ({ tableId, onLeave }) => {
+export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
   const [gameState, setGameState] = useState<GameState | null>(null);
-  const [clientId, setClientId] = useState<string>('');
   const [raiseAmount, setRaiseAmount] = useState<number>(0);
   const [bankruptTimer, setBankruptTimer] = useState<number | null>(null);
   const [isSpectating, setIsSpectating] = useState<boolean>(false);
@@ -48,9 +48,7 @@ export const PokerTable: React.FC<Props> = ({ tableId, onLeave }) => {
   const ws = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    const id = Math.random().toString(36).substring(7);
-    setClientId(id);
-    ws.current = new WebSocket(`ws://localhost:8000/ws/${tableId}/${id}`);
+    ws.current = new WebSocket(`ws://localhost:8000/ws/${tableId}/${clientId}`);
     ws.current.onmessage = (event) => {
       try {
         const data: GameState = JSON.parse(event.data);
@@ -58,7 +56,7 @@ export const PokerTable: React.FC<Props> = ({ tableId, onLeave }) => {
       } catch (e) { console.error("Failed to parse", e); }
     };
     return () => ws.current?.close();
-  }, [tableId]);
+  }, [tableId, clientId]);
 
   useEffect(() => {
      if(gameState) setRaiseAmount(gameState.current_highest_bet + gameState.min_raise);
@@ -167,16 +165,54 @@ export const PokerTable: React.FC<Props> = ({ tableId, onLeave }) => {
       {/* 结算弹窗 (仅对未破产或正在观战的人正常弹出) */}
       {showSettlement && (!isBankrupt || isSpectating) && !hasWonGale && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: '#222', padding: '40px', borderRadius: '15px', border: '2px solid gold', textAlign: 'center', minWidth: '350px' }}>
-            <h1 style={{ color: 'gold', margin: '0 0 20px 0' }}>🏆 结算时间</h1>
-            {gameState.showdown_results.map((r, idx) => (
-              <div key={idx} style={{ marginBottom: '15px', fontSize: '1.2rem' }}>
-                <strong style={{ color: 'var(--accent)' }}>{r.name}</strong> 依靠 <span style={{color:'white', fontWeight:'bold'}}>{r.reason}</span> <br/>
-                赢得了 <span style={{ color: '#4caf50', fontWeight: 'bold' }}>💰 {r.won}</span> 筹码！
+          <div style={{ background: '#111', padding: '40px', borderRadius: '20px', border: '2px solid gold', textAlign: 'center', minWidth: '500px', boxShadow: '0 10px 40px rgba(255, 215, 0, 0.2)', maxHeight: '90vh', overflowY: 'auto' }}>
+            <h1 style={{ color: 'gold', margin: '0 0 30px 0', fontSize: '2.5rem', textShadow: '0 2px 10px rgba(255, 215, 0, 0.3)' }}>🏆 巅峰决战 🏆</h1>
+            
+            {/* 公共牌区 */}
+            {gameState.community_cards.length > 0 && (
+              <div style={{ marginBottom: '30px', padding: '20px', background: 'rgba(255,255,255,0.05)', borderRadius: '15px' }}>
+                <h4 style={{ color: 'var(--text-muted)', margin: '0 0 15px 0', fontSize: '1.1rem' }}>🌍 公共牌面 🌍</h4>
+                <div style={{ display: 'flex', gap: '15px', justifyContent: 'center' }}>
+                  {gameState.community_cards.map((card, idx) => (
+                    <div key={idx} className={`card community ${getCardColorClass(card)}`} style={{ transform: 'none', width: '60px', height: '84px', fontSize: '1.5rem', boxShadow: '0 4px 10px rgba(0,0,0,0.5)' }}>
+                      {card}
+                    </div>
+                  ))}
+                </div>
               </div>
-            ))}
+            )}
+
+            {/* 开奖名单 */}
+            <div style={{ marginBottom: '30px' }}>
+              {gameState.showdown_results.map((r, idx) => (
+                <div key={idx} style={{ marginBottom: '15px', fontSize: '1.4rem' }}>
+                  赢家 <strong style={{ color: 'var(--accent)' }}>{r.name}</strong> 依靠 <span style={{color:'white', fontWeight:'bold'}}>{r.reason}</span> <br/>
+                  通吃 <span style={{ color: '#4caf50', fontWeight: 'bold' }}>💰 {r.won}</span> 筹码！
+                </div>
+              ))}
+            </div>
+
+            {/* 剩余摊牌玩家底牌展示 */}
+            <div style={{ marginBottom: '30px', padding: '20px', background: 'rgba(0,0,0,0.4)', borderRadius: '15px', border: '1px solid rgba(255,255,255,0.1)' }}>
+               <h4 style={{ color: 'var(--text-muted)', margin: '0 0 20px 0', fontSize: '1.1rem' }}>🃏 最终拼杀底牌揭晓 🃏</h4>
+               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                 {gameState.players.filter(p => p.is_active && p.hole_cards && p.hole_cards.length > 0).map(p => (
+                    <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 30px' }}>
+                       <span style={{ color: 'white', fontWeight: 'bold', fontSize: '1.3rem' }}>{p.name}</span>
+                       <div style={{ display: 'flex', gap: '10px' }}>
+                         {p.hole_cards.map((card, idx) => (
+                           <span key={idx} style={{ background: 'white', border: '1px solid #ccc', borderRadius: '8px', padding: '8px 15px', fontSize: '1.5rem', color: getCardColorClass(card) === 'red' ? '#e53935' : '#333', fontWeight: 'bold', boxShadow: '0 2px 5px rgba(0,0,0,0.5)' }}>
+                             {card}
+                           </span>
+                         ))}
+                       </div>
+                    </div>
+                 ))}
+               </div>
+            </div>
+
             {me && me.chips > 0 && (
-              <button className="btn-start" style={{ marginTop: '20px', padding: '15px 40px', fontSize: '1.2rem' }} onClick={() => handleAction("start")}>
+              <button className="btn-start" style={{ marginTop: '10px', padding: '20px 50px', fontSize: '1.3rem', letterSpacing: '2px', boxShadow: '0 5px 15px rgba(76, 175, 80, 0.4)' }} onClick={() => handleAction("start")}>
                 <Play size={20} /> 新的一局
               </button>
             )}

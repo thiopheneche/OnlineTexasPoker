@@ -1,6 +1,6 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from typing import List, Dict
+from typing import List, Dict, Set
 import json
 import uuid
 from pydantic import BaseModel
@@ -51,6 +51,27 @@ class CreateTableRequest(BaseModel):
     small_blind: int = 25
     big_blind: int = 50
 
+active_users: Set[str] = set()
+
+class LoginRequest(BaseModel):
+    username: str
+
+@app.post("/login")
+async def login(req: LoginRequest):
+    if req.username in active_users:
+        return {"success": False, "error": "该 ID 当前已在线，请换一个名称"}
+    return {"success": True}
+
+@app.websocket("/ws/session/{username}")
+async def session_websocket(websocket: WebSocket, username: str):
+    await websocket.accept()
+    active_users.add(username)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        active_users.discard(username)
+
 @app.get("/tables")
 async def get_tables():
     result = []
@@ -86,7 +107,7 @@ async def websocket_endpoint(websocket: WebSocket, table_id: str, client_id: str
     await manager.connect(websocket, table_id)
     
     if not any(p.id == client_id for p in global_game_state.players):
-        new_player = Player(id=client_id, name=f"Player_{client_id}", chips=1000)
+        new_player = Player(id=client_id, name=client_id, chips=1000)
         global_game_state.players.append(new_player)
     else:
         for p in global_game_state.players:
