@@ -56,7 +56,7 @@ active_users: Set[str] = set()
 class LoginRequest(BaseModel):
     username: str
 
-@app.post("/login")
+@app.post("/api/login")
 async def login(req: LoginRequest):
     if req.username in active_users:
         return {"success": False, "error": "该 ID 当前已在线，请换一个名称"}
@@ -72,7 +72,7 @@ async def session_websocket(websocket: WebSocket, username: str):
     except WebSocketDisconnect:
         active_users.discard(username)
 
-@app.get("/tables")
+@app.get("/api/tables")
 async def get_tables():
     result = []
     for tid, state in tables.items():
@@ -83,7 +83,7 @@ async def get_tables():
         })
     return result
 
-@app.post("/tables")
+@app.post("/api/tables")
 async def create_table(req: CreateTableRequest):
     tid = str(uuid.uuid4())[:8]
     tables[tid] = GameState(
