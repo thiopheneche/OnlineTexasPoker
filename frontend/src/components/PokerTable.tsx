@@ -211,11 +211,16 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
                </div>
             </div>
 
-            {me && me.chips > 0 && (
-              <button className="btn-start" style={{ marginTop: '10px', padding: '20px 50px', fontSize: '1.3rem', letterSpacing: '2px', boxShadow: '0 5px 15px rgba(76, 175, 80, 0.4)' }} onClick={() => handleAction("start")}>
-                <Play size={20} /> 新的一局
+            <div style={{ display: 'flex', gap: '20px', justifyContent: 'center', marginTop: '10px' }}>
+              {me && me.chips > 0 && (
+                <button className="btn-start" style={{ padding: '15px 40px', fontSize: '1.2rem', letterSpacing: '2px', boxShadow: '0 5px 15px rgba(76, 175, 80, 0.4)' }} onClick={() => handleAction("start")}>
+                  <Play size={20} /> 新的一局
+                </button>
+              )}
+              <button onClick={onLeave} style={{ padding: '15px 40px', fontSize: '1.2rem', background: 'transparent', border: '1px solid gray', color: 'gray', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <LogOut size={20} /> 返回大厅
               </button>
-            )}
+            </div>
           </div>
         </div>
       )}
@@ -243,7 +248,7 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
         </div>
       )}
 
-      <header className="header">
+      <header className="header" style={{ position: 'relative', zIndex: 10000 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
            <button onClick={onLeave} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: 'var(--text-main)', padding: '10px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap:'5px' }}>
              <LogOut size={16} /> 退大厅
