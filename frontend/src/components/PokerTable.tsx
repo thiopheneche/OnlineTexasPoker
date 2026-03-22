@@ -384,7 +384,7 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
         </div>
       </header>
 
-      <main className="game-board" style={{ paddingBottom: '20px' }}>
+      <main className="game-board">
         <div className="opponents">
           {gameState.players.map((p) => {
              if (p.id === clientId) return null;
@@ -436,10 +436,7 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
                 : <div className="card private empty">暂无手牌</div>}
             </div>
             
-            {/* spacer for fixed bottom bar */}
-            <div style={{ height: '140px' }} />
-            
-            <div className="actions" style={{position: 'fixed', bottom: 0, left: 0, right: 0, padding: '15px 20px', background: 'rgba(0,0,0,0.92)', backdropFilter: 'blur(10px)', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'center', gap: '10px', flexWrap: 'wrap', zIndex: 10000}}>
+            <div className="actions" style={{padding: '1vh 1vw', background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(10px)', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'center', gap: '8px', flexWrap: 'wrap', flexShrink: 0}}>
                {gameState.phase === "WAITING" ? (
                  <button 
                    className="btn-start" 
