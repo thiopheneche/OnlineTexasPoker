@@ -424,65 +424,81 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
         </section>
 
         {me && (
-          <section className="my-area">
-            <div className="my-info">
-              <h3>我的底牌 ({me.name}) {isSpectating && " - 👁️观战中"}</h3>
-              <p className="my-chips">筹码: 💰 {me.chips} | 本轮下注: 💰 {me.current_bet}</p>
-               <span style={{fontSize: '0.8rem', color:'var(--text-muted)'}}>❤️ 剩余买入: {3 - me.revives_used}</span>
-            </div>
-            <div className="my-hole-cards">
-               {me.hole_cards.length > 0 
-                ? me.hole_cards.map((card, idx) => <div key={idx} className={`card private ${getCardColorClass(card)}`}>{card}</div>)
-                : <div className="card private empty">暂无手牌</div>}
-            </div>
+          <section style={{ flexShrink: 0, background: 'rgba(0,0,0,0.75)', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', gap: '0' }}>
             
-            <div className="actions" style={{padding: '1vh 1vw', background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(10px)', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'center', gap: '8px', flexWrap: 'wrap', flexShrink: 0}}>
-               {gameState.phase === "WAITING" ? (
-                 <button 
-                   className="btn-start" 
-                   style={{padding: '12px 40px', fontSize: '1.2rem', opacity: (gameState.players.filter(p => p.chips > 0).length < 2 || isSpectating || me.chips === 0) ? 0.5 : 1}} 
-                   onClick={() => handleAction("start")}
-                   disabled={gameState.players.filter(p => p.chips > 0).length < 2 || isSpectating || me.chips === 0}
-                 >
-                   <Play size={20} /> {gameState.players.filter(p => p.chips > 0).length < 2 ? "等待筹码充足的玩家..." : "新的一局"}
-                 </button>
-               ) : (
-                 <>
-                   <button style={{background: 'var(--danger)', color: 'white', opacity: disableControls ? 0.3 : 1, cursor: disableControls ? 'not-allowed' : 'pointer'}} disabled={disableControls} onClick={() => handleAction("fold")}>
-                     <XCircle size={18} /> 弃牌 
-                   </button>
-                   {canCheck ? (
-                     <button style={{background: '#4caf50', color: 'white', opacity: disableControls ? 0.3 : 1, cursor: disableControls ? 'not-allowed' : 'pointer'}} disabled={disableControls} onClick={() => handleAction("check")}>
-                       <Check size={18} /> 过牌 
-                     </button>
-                   ) : (
-                     <button style={{background: '#2196f3', color: 'white', opacity: disableControls ? 0.3 : 1, cursor: disableControls ? 'not-allowed' : 'pointer'}} disabled={disableControls} onClick={() => handleAction("call")}>
-                       <Coins size={18} /> 跟注 ({Math.min(gameState.current_highest_bet - me.current_bet, me.chips)})
-                     </button>
-                   )}
-                   
-                   {/* 增强版加注控制面板 */}
-                   <div style={{display: 'flex', gap: '8px', alignItems: 'center', background: 'rgba(255,255,255,0.1)', padding: '8px 12px', borderRadius: '10px', opacity: disableControls ? 0.3 : 1, pointerEvents: disableControls ? 'none' : 'auto', flexWrap: 'wrap'}}>
-                     <div style={{display: 'flex', gap: '4px', flexWrap: 'wrap'}}>
-                       <button onClick={() => setRaiseAmount(minRaiseTotal)} style={presetBtnStyle}>最小</button>
-                       <button onClick={() => setRaiseAmount(Math.min(gameState.current_highest_bet * 2, maxRaiseTotal))} style={presetBtnStyle}>2x</button>
-                       <button onClick={() => setRaiseAmount(Math.min(gameState.current_highest_bet * 3, maxRaiseTotal))} style={presetBtnStyle}>3x</button>
-                       <button onClick={() => setRaiseAmount(Math.min(Math.floor(gameState.pot / 2) + gameState.current_highest_bet, maxRaiseTotal))} style={presetBtnStyle}>½底池</button>
-                       <button onClick={() => setRaiseAmount(Math.min(gameState.pot + gameState.current_highest_bet, maxRaiseTotal))} style={presetBtnStyle}>满底池</button>
-                     </div>
-                     <input type="range" min={minRaiseTotal} max={maxRaiseTotal} value={Math.min(raiseAmount, maxRaiseTotal)} onChange={(e) => setRaiseAmount(Number(e.target.value))} style={{cursor:'pointer', flex: '1', minWidth: '80px'}} />
-                     <input type="number" min={minRaiseTotal} max={maxRaiseTotal} value={raiseAmount} onChange={(e) => { const v = Number(e.target.value); if (!isNaN(v)) setRaiseAmount(v); }} style={{width: '75px', padding: '5px 8px', background: 'rgba(0,0,0,0.4)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '6px', fontSize: '0.95rem', textAlign: 'center', outline: 'none'}} />
-                     <button className="btn-bet" onClick={() => handleAction("raise", raiseAmount - me.current_bet)} disabled={raiseAmount > maxRaiseTotal || raiseAmount < minRaiseTotal}>
-                       <ArrowUpCircle size={18} /> 加注
-                     </button>
-                   </div>
-
-                   <button style={{background: 'purple', color: 'white', opacity: disableControls ? 0.3 : 1, cursor: disableControls ? 'not-allowed' : 'pointer'}} disabled={disableControls} onClick={() => handleAction("all-in")}>
-                     ALL-IN
-                   </button>
-                 </>
-               )}
+            {/* Row 1: 底牌 */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', padding: '0.8vh 2vw', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+              <span style={{ color: 'var(--primary)', fontWeight: 600, fontSize: 'clamp(0.75rem, 1.3vw, 1rem)' }}>
+                {me.name} 的底牌{isSpectating && ' 👁️观战中'}:
+              </span>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                {me.hole_cards.length > 0 
+                  ? me.hole_cards.map((card, idx) => (
+                    <div key={idx} className={`card private ${getCardColorClass(card)}`} style={{ width: 'clamp(35px, 5vw, 55px)', height: 'clamp(50px, 7vw, 78px)', fontSize: 'clamp(1rem, 2vw, 1.6rem)' }}>{card}</div>
+                  ))
+                  : <span style={{ color: 'var(--text-muted)', fontSize: 'clamp(0.7rem, 1.2vw, 0.9rem)' }}>暂无手牌</span>
+                }
+              </div>
             </div>
+
+            {/* Row 2: 筹码 + 剩余买入 */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '20px', padding: '0.5vh 2vw', borderBottom: '1px solid rgba(255,255,255,0.06)', fontSize: 'clamp(0.7rem, 1.2vw, 0.9rem)' }}>
+              <span style={{ color: 'var(--text-muted)' }}>筹码: <strong style={{ color: '#ffd700' }}>💰 {me.chips}</strong></span>
+              <span style={{ color: 'var(--text-muted)' }}>本轮下注: <strong style={{ color: 'white' }}>💰 {me.current_bet}</strong></span>
+              <span style={{ color: 'var(--text-muted)' }}>❤️ 剩余买入: <strong style={{ color: 'var(--accent)' }}>{3 - me.revives_used}</strong></span>
+            </div>
+
+            {gameState.phase === "WAITING" ? (
+              /* WAITING: 开局按钮 */
+              <div style={{ display: 'flex', justifyContent: 'center', padding: '1vh 2vw' }}>
+                <button 
+                  className="btn-start" 
+                  style={{ padding: '0.8vh 3vw', fontSize: 'clamp(0.85rem, 1.5vw, 1.1rem)', opacity: (gameState.players.filter(p => p.chips > 0).length < 2 || isSpectating || me.chips === 0) ? 0.5 : 1 }} 
+                  onClick={() => handleAction("start")}
+                  disabled={gameState.players.filter(p => p.chips > 0).length < 2 || isSpectating || me.chips === 0}
+                >
+                  <Play size={16} /> {gameState.players.filter(p => p.chips > 0).length < 2 ? "等待筹码充足的玩家..." : "🎲 新的一局"}
+                </button>
+              </div>
+            ) : (
+              <>
+                {/* Row 3: 弃牌 + 过牌/跟注 */}
+                <div style={{ display: 'flex', justifyContent: 'center', gap: '10px', padding: '0.6vh 2vw', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                  <button style={{ flex: 1, maxWidth: '200px', background: 'var(--danger)', color: 'white', opacity: disableControls ? 0.3 : 1, cursor: disableControls ? 'not-allowed' : 'pointer', justifyContent: 'center' }} disabled={disableControls} onClick={() => handleAction("fold")}>
+                    <XCircle size={16} /> 弃牌
+                  </button>
+                  {canCheck ? (
+                    <button style={{ flex: 1, maxWidth: '200px', background: '#4caf50', color: 'white', opacity: disableControls ? 0.3 : 1, cursor: disableControls ? 'not-allowed' : 'pointer', justifyContent: 'center' }} disabled={disableControls} onClick={() => handleAction("check")}>
+                      <Check size={16} /> 过牌
+                    </button>
+                  ) : (
+                    <button style={{ flex: 1, maxWidth: '200px', background: '#2196f3', color: 'white', opacity: disableControls ? 0.3 : 1, cursor: disableControls ? 'not-allowed' : 'pointer', justifyContent: 'center' }} disabled={disableControls} onClick={() => handleAction("call")}>
+                      <Coins size={16} /> 跟注 ({Math.min(gameState.current_highest_bet - me.current_bet, me.chips)})
+                    </button>
+                  )}
+                </div>
+
+                {/* Row 4: 预设加注 + 自定义输入 + 加注按钮 + ALL-IN */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.6vh 2vw', flexWrap: 'wrap', opacity: disableControls ? 0.3 : 1, pointerEvents: disableControls ? 'none' : 'auto' }}>
+                  <button onClick={() => setRaiseAmount(minRaiseTotal)} style={presetBtnStyle}>最小</button>
+                  <button onClick={() => setRaiseAmount(Math.min(gameState.current_highest_bet * 2, maxRaiseTotal))} style={presetBtnStyle}>2x</button>
+                  <button onClick={() => setRaiseAmount(Math.min(gameState.current_highest_bet * 3, maxRaiseTotal))} style={presetBtnStyle}>3x</button>
+                  <button onClick={() => setRaiseAmount(Math.min(Math.floor(gameState.pot / 2) + gameState.current_highest_bet, maxRaiseTotal))} style={presetBtnStyle}>½底池</button>
+                  <button onClick={() => setRaiseAmount(Math.min(gameState.pot + gameState.current_highest_bet, maxRaiseTotal))} style={presetBtnStyle}>满底池</button>
+                  <input 
+                    type="number" min={minRaiseTotal} max={maxRaiseTotal} value={raiseAmount} 
+                    onChange={(e) => { const v = Number(e.target.value); if (!isNaN(v)) setRaiseAmount(v); }} 
+                    style={{ width: '70px', padding: '4px 6px', background: 'rgba(0,0,0,0.5)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '6px', fontSize: 'clamp(0.7rem, 1.1vw, 0.9rem)', textAlign: 'center', outline: 'none' }} 
+                  />
+                  <button className="btn-bet" onClick={() => handleAction("raise", raiseAmount - me.current_bet)} disabled={raiseAmount > maxRaiseTotal || raiseAmount < minRaiseTotal} style={{ fontSize: 'clamp(0.7rem, 1.1vw, 0.9rem)' }}>
+                    <ArrowUpCircle size={14} /> 加注到 {raiseAmount}
+                  </button>
+                  <button style={{ background: 'linear-gradient(135deg, #7b1fa2, #4a148c)', color: 'white', opacity: disableControls ? 0.3 : 1, cursor: disableControls ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: 'clamp(0.7rem, 1.1vw, 0.9rem)' }} disabled={disableControls} onClick={() => handleAction("all-in")}>
+                    🔥 ALL-IN
+                  </button>
+                </div>
+              </>
+            )}
           </section>
         )}
       </main>
