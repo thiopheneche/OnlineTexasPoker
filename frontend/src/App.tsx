@@ -11,7 +11,7 @@ function App() {
   useEffect(() => {
     if (username) {
       // 建立常驻 Session 心跳
-      const sessionWs = new WebSocket(`ws://localhost:8000/ws/session/${username}`);
+      const sessionWs = new WebSocket(`ws://23.128.228.89:7777/ws/session/${username}`);
       sessionWs.onclose = () => {
          // 自动处理异常断线（静默不打扰用户当前游戏）
       };
@@ -23,7 +23,7 @@ function App() {
     e.preventDefault();
     if (!loginInput.trim()) return;
     try {
-      const res = await fetch('http://localhost:8000/login', {
+      const res = await fetch('http://23.128.228.89:7777/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: loginInput.trim() })
