@@ -20,7 +20,7 @@ export const Lobby: React.FC<Props> = ({ onJoinTable }) => {
   const fetchTables = async () => {
     setLoading(true);
     try {
-      const res = await fetch('http://23.128.228.89:7777/tables');
+      const res = await fetch('https://texaspokers.thiopheneche.dpdns.org/tables');
       if (res.ok) {
         const data = await res.json();
         setTables(data);
@@ -37,7 +37,7 @@ export const Lobby: React.FC<Props> = ({ onJoinTable }) => {
 
   const handleCreateTable = async () => {
     try {
-      const res = await fetch('http://23.128.228.89:7777/tables', { 
+      const res = await fetch('https://texaspokers.thiopheneche.dpdns.org/tables', { 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ small_blind: smallBlind, big_blind: bigBlind })
