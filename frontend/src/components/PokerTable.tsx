@@ -55,6 +55,8 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
   const [chatInput, setChatInput] = useState<string>('');
   const [chatOpen, setChatOpen] = useState<boolean>(false);
   const [unreadCount, setUnreadCount] = useState<number>(0);
+  const [cardsRevealed, setCardsRevealed] = useState<boolean>(false);
+  const peekTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ws = useRef<WebSocket | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -431,14 +433,34 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
               <span style={{ color: 'var(--primary)', fontWeight: 600, fontSize: 'clamp(0.75rem, 1.3vw, 1rem)' }}>
                 {me.name} 的底牌{isSpectating && ' 👁️观战中'}:
               </span>
-              <div style={{ display: 'flex', gap: '6px' }}>
-                {me.hole_cards.length > 0 
-                  ? me.hole_cards.map((card, idx) => (
-                    <div key={idx} className={`card private ${getCardColorClass(card)}`} style={{ width: 'clamp(35px, 5vw, 55px)', height: 'clamp(50px, 7vw, 78px)', fontSize: 'clamp(1rem, 2vw, 1.6rem)' }}>{card}</div>
-                  ))
-                  : <span style={{ color: 'var(--text-muted)', fontSize: 'clamp(0.7rem, 1.2vw, 0.9rem)' }}>暂无手牌</span>
-                }
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                {me.hole_cards.length > 0 ? (
+                  cardsRevealed ? (
+                    me.hole_cards.map((card, idx) => (
+                      <div key={idx} className={`card private ${getCardColorClass(card)}`} style={{ width: 'clamp(35px, 5vw, 55px)', height: 'clamp(50px, 7vw, 78px)', fontSize: 'clamp(1rem, 2vw, 1.6rem)', transition: 'all 0.3s' }}>{card}</div>
+                    ))
+                  ) : (
+                    me.hole_cards.map((_, idx) => (
+                      <div key={idx} style={{ width: 'clamp(35px, 5vw, 55px)', height: 'clamp(50px, 7vw, 78px)', background: 'linear-gradient(135deg, #1a237e, #283593)', borderRadius: '8px', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: 'clamp(1rem, 2vw, 1.5rem)', boxShadow: '0 2px 8px rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.15)' }}>🂠</div>
+                    ))
+                  )
+                ) : (
+                  <span style={{ color: 'var(--text-muted)', fontSize: 'clamp(0.7rem, 1.2vw, 0.9rem)' }}>暂无手牌</span>
+                )}
               </div>
+              {me.hole_cards.length > 0 && (
+                <button 
+                  onClick={() => {
+                    if (cardsRevealed) return;
+                    setCardsRevealed(true);
+                    if (peekTimerRef.current) clearTimeout(peekTimerRef.current);
+                    peekTimerRef.current = setTimeout(() => setCardsRevealed(false), 3000);
+                  }}
+                  style={{ padding: '4px 12px', background: cardsRevealed ? 'rgba(3,218,198,0.3)' : 'rgba(255,255,255,0.15)', color: cardsRevealed ? 'var(--accent)' : '#ccc', border: `1px solid ${cardsRevealed ? 'var(--accent)' : 'rgba(255,255,255,0.2)'}`, borderRadius: '8px', cursor: cardsRevealed ? 'default' : 'pointer', fontSize: 'clamp(0.7rem, 1.1vw, 0.85rem)', whiteSpace: 'nowrap', transition: 'all 0.3s' }}
+                >
+                  {cardsRevealed ? '👁️ 展示中...' : '👀 看牌'}
+                </button>
+              )}
             </div>
 
             {/* Row 2: 筹码 + 剩余买入 */}
