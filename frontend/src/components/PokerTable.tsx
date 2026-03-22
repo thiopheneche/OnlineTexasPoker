@@ -99,7 +99,6 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
       const isPhaseSafe = gameState.phase === "WAITING" || gameState.phase === "SHOWDOWN";
       
       const allOthersBusted = gameState.players.length >= 2 && gameState.players.filter(p => p.id !== clientId).every(p => {
-          // 一个对手彻底死亡的充分条件：已无筹码、已无复活、并且处于安全发奖期（或者他已经因为彻底战败而未下场参与这把牌）
           return p.chips === 0 && p.revives_used >= 3 && (isPhaseSafe || !p.is_active);
       });
 
@@ -107,7 +106,6 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
          setHasWonGale(true);
       }
       
-      // 如果已经处于赢家状态，但检测到有新的带着筹码的挑战者进来，重置状态
       if (hasWonGale) {
          const activeOpponents = gameState.players.filter(p => p.id !== clientId && p.chips > 0);
          if (activeOpponents.length > 0) {
@@ -129,6 +127,17 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
   const disableControls = !isMyTurn || isWaitingOrShowdown;
 
   const showSettlement = gameState.phase === "SHOWDOWN" && gameState.showdown_results && gameState.showdown_results.length > 0;
+
+  // 加注辅助计算
+  const minRaiseTotal = gameState.current_highest_bet + gameState.min_raise;
+  const maxRaiseTotal = me ? me.chips + me.current_bet : 0;
+
+  // 快捷预设按钮样式
+  const presetBtnStyle: React.CSSProperties = {
+    padding: '3px 8px', fontSize: '0.75rem', background: 'rgba(255,255,255,0.15)',
+    color: '#ccc', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '6px',
+    cursor: 'pointer', whiteSpace: 'nowrap'
+  };
 
   return (
     <div className="poker-table-container">
@@ -162,13 +171,12 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
         </div>
       )}
 
-      {/* 结算弹窗 (仅对未破产或正在观战的人正常弹出) */}
+      {/* 结算弹窗 */}
       {showSettlement && (!isBankrupt || isSpectating) && !hasWonGale && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ background: '#111', padding: '40px', borderRadius: '20px', border: '2px solid gold', textAlign: 'center', minWidth: '500px', boxShadow: '0 10px 40px rgba(255, 215, 0, 0.2)', maxHeight: '90vh', overflowY: 'auto' }}>
             <h1 style={{ color: 'gold', margin: '0 0 30px 0', fontSize: '2.5rem', textShadow: '0 2px 10px rgba(255, 215, 0, 0.3)' }}>🏆 巅峰决战 🏆</h1>
             
-            {/* 公共牌区 */}
             {gameState.community_cards.length > 0 && (
               <div style={{ marginBottom: '30px', padding: '20px', background: 'rgba(255,255,255,0.05)', borderRadius: '15px' }}>
                 <h4 style={{ color: 'var(--text-muted)', margin: '0 0 15px 0', fontSize: '1.1rem' }}>🌍 公共牌面 🌍</h4>
@@ -182,7 +190,6 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
               </div>
             )}
 
-            {/* 开奖名单 */}
             <div style={{ marginBottom: '30px' }}>
               {gameState.showdown_results.map((r, idx) => (
                 <div key={idx} style={{ marginBottom: '15px', fontSize: '1.4rem' }}>
@@ -192,7 +199,6 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
               ))}
             </div>
 
-            {/* 剩余摊牌玩家底牌展示 */}
             <div style={{ marginBottom: '30px', padding: '20px', background: 'rgba(0,0,0,0.4)', borderRadius: '15px', border: '1px solid rgba(255,255,255,0.1)' }}>
                <h4 style={{ color: 'var(--text-muted)', margin: '0 0 20px 0', fontSize: '1.1rem' }}>🃏 最终拼杀底牌揭晓 🃏</h4>
                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -342,13 +348,33 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
                      </button>
                    )}
                    
-                   <div style={{display: 'flex', gap: '10px', alignItems: 'center', background: 'rgba(255,255,255,0.1)', padding: '5px 15px', borderRadius: '10px', opacity: disableControls ? 0.3 : 1, pointerEvents: disableControls ? 'none' : 'auto'}}>
-                     <input type="range" min={gameState.current_highest_bet + gameState.min_raise} max={me.chips + me.current_bet} value={Math.min(raiseAmount, me.chips + me.current_bet)} onChange={(e) => setRaiseAmount(Number(e.target.value))} style={{cursor:'pointer'}} />
-                     <span style={{minWidth: '50px'}}>{raiseAmount}</span>
-                     <button className="btn-bet" onClick={() => handleAction("raise", raiseAmount - me.current_bet)} disabled={raiseAmount > (me.chips + me.current_bet)}>
-                       <ArrowUpCircle size={18} /> 加注到 {raiseAmount}
+                   {/* 增强版加注控制面板 */}
+                   <div style={{display: 'flex', gap: '8px', alignItems: 'center', background: 'rgba(255,255,255,0.1)', padding: '8px 12px', borderRadius: '10px', opacity: disableControls ? 0.3 : 1, pointerEvents: disableControls ? 'none' : 'auto', flexWrap: 'wrap'}}>
+                     {/* 快捷预设按钮 */}
+                     <div style={{display: 'flex', gap: '4px', flexWrap: 'wrap'}}>
+                       <button onClick={() => setRaiseAmount(minRaiseTotal)} style={presetBtnStyle}>最小</button>
+                       <button onClick={() => setRaiseAmount(Math.min(gameState.current_highest_bet * 2, maxRaiseTotal))} style={presetBtnStyle}>2x</button>
+                       <button onClick={() => setRaiseAmount(Math.min(gameState.current_highest_bet * 3, maxRaiseTotal))} style={presetBtnStyle}>3x</button>
+                       <button onClick={() => setRaiseAmount(Math.min(Math.floor(gameState.pot / 2) + gameState.current_highest_bet, maxRaiseTotal))} style={presetBtnStyle}>½底池</button>
+                       <button onClick={() => setRaiseAmount(Math.min(gameState.pot + gameState.current_highest_bet, maxRaiseTotal))} style={presetBtnStyle}>满底池</button>
+                     </div>
+                     {/* 滑块 */}
+                     <input type="range" min={minRaiseTotal} max={maxRaiseTotal} value={Math.min(raiseAmount, maxRaiseTotal)} onChange={(e) => setRaiseAmount(Number(e.target.value))} style={{cursor:'pointer', flex: '1', minWidth: '80px'}} />
+                     {/* 手动输入框 */}
+                     <input 
+                       type="number" 
+                       min={minRaiseTotal} 
+                       max={maxRaiseTotal} 
+                       value={raiseAmount} 
+                       onChange={(e) => { const v = Number(e.target.value); if (!isNaN(v)) setRaiseAmount(v); }} 
+                       style={{width: '75px', padding: '5px 8px', background: 'rgba(0,0,0,0.4)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '6px', fontSize: '0.95rem', textAlign: 'center', outline: 'none'}} 
+                     />
+                     {/* 加注确认 */}
+                     <button className="btn-bet" onClick={() => handleAction("raise", raiseAmount - me.current_bet)} disabled={raiseAmount > maxRaiseTotal || raiseAmount < minRaiseTotal}>
+                       <ArrowUpCircle size={18} /> 加注
                      </button>
                    </div>
+
                    <button style={{background: 'purple', color: 'white', opacity: disableControls ? 0.3 : 1, cursor: disableControls ? 'not-allowed' : 'pointer'}} disabled={disableControls} onClick={() => handleAction("all-in")}>
                      ALL-IN
                    </button>
