@@ -46,6 +46,15 @@ class ConnectionManager:
                 except Exception:
                     pass
 
+    async def broadcast_chat(self, table_id: str, sender: str, message: str):
+        if table_id in self.active_connections:
+            chat_json = json.dumps({"type": "chat", "sender": sender, "message": message})
+            for connection in self.active_connections[table_id]:
+                try:
+                    await connection.send_text(chat_json)
+                except Exception:
+                    pass
+
 manager = ConnectionManager()
 
 class CreateTableRequest(BaseModel):
@@ -164,8 +173,14 @@ async def websocket_endpoint(websocket: WebSocket, table_id: str, client_id: str
             try:
                 action_data = json.loads(data_str)
                 action = action_data.get("action")
-                amount = action_data.get("amount", 0)
                 
+                if action == "chat":
+                    chat_msg = action_data.get("message", "").strip()
+                    if chat_msg:
+                        await manager.broadcast_chat(table_id, client_id, chat_msg)
+                    continue
+                
+                amount = action_data.get("amount", 0)
                 await PokerEngine.process_action(global_game_state, global_deck, client_id, action, amount, cb)
                         
             except json.JSONDecodeError:
