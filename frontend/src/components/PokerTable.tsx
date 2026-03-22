@@ -320,21 +320,56 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
                 </div>
               ))}
             </div>
-            <div style={{ marginBottom: '30px', padding: '20px', background: 'rgba(0,0,0,0.4)', borderRadius: '15px', border: '1px solid rgba(255,255,255,0.1)' }}>
-               <h4 style={{ color: 'var(--text-muted)', margin: '0 0 20px 0', fontSize: '1.1rem' }}>🃏 最终拼杀底牌揭晓 🃏</h4>
-               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                 {gameState.players.filter(p => p.is_active && p.hole_cards && p.hole_cards.length > 0).map(p => (
-                    <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 30px' }}>
-                       <span style={{ color: 'white', fontWeight: 'bold', fontSize: '1.3rem' }}>{p.name}</span>
-                       <div style={{ display: 'flex', gap: '10px' }}>
-                         {p.hole_cards.map((card, idx) => (
-                           <span key={idx} style={{ background: 'white', border: '1px solid #ccc', borderRadius: '8px', padding: '8px 15px', fontSize: '1.5rem', color: getCardColorClass(card) === 'red' ? '#e53935' : '#333', fontWeight: 'bold', boxShadow: '0 2px 5px rgba(0,0,0,0.5)' }}>{card}</span>
-                         ))}
-                       </div>
-                    </div>
-                 ))}
-               </div>
-            </div>
+
+            {/* 弃牌获胜时的亮牌选项 */}
+            {(() => {
+              const isFoldWin = gameState.showdown_results.some(r => r.reason.includes('Fold'));
+              const amIWinner = me && gameState.showdown_results.some(r => r.name === me.name);
+              const myCardsShown = me && me.hole_cards && me.hole_cards.length > 0;
+              if (isFoldWin && amIWinner) {
+                return (
+                  <div style={{ marginBottom: '30px', padding: '20px', background: 'rgba(255,255,255,0.05)', borderRadius: '15px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                    {myCardsShown ? (
+                      <>
+                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginBottom: '15px' }}>
+                          {me.hole_cards.map((card, idx) => (
+                            <span key={idx} style={{ background: 'white', border: '1px solid #ccc', borderRadius: '8px', padding: '8px 15px', fontSize: '1.5rem', color: getCardColorClass(card) === 'red' ? '#e53935' : '#333', fontWeight: 'bold', boxShadow: '0 2px 5px rgba(0,0,0,0.5)' }}>{card}</span>
+                          ))}
+                        </div>
+                        <button onClick={() => handleAction("hide_cards")} style={{ padding: '8px 20px', background: 'rgba(255,255,255,0.15)', color: '#ccc', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem' }}>
+                          🙈 隐藏底牌
+                        </button>
+                      </>
+                    ) : (
+                      <button onClick={() => handleAction("show_cards")} style={{ padding: '10px 25px', background: 'linear-gradient(135deg, #e65c00, #F9D423)', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '1rem', fontWeight: 'bold', boxShadow: '0 3px 10px rgba(230,92,0,0.3)' }}>
+                        🃏 向对手展示底牌
+                      </button>
+                    )}
+                  </div>
+                );
+              }
+              return null;
+            })()}
+
+            {/* 正常showdown的底牌揭晓 */}
+            {gameState.players.filter(p => p.is_active && p.hole_cards && p.hole_cards.length > 0).length > 0 && (
+              <div style={{ marginBottom: '30px', padding: '20px', background: 'rgba(0,0,0,0.4)', borderRadius: '15px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                 <h4 style={{ color: 'var(--text-muted)', margin: '0 0 20px 0', fontSize: '1.1rem' }}>🃏 最终拼杀底牌揭晓 🃏</h4>
+                 <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                   {gameState.players.filter(p => p.is_active && p.hole_cards && p.hole_cards.length > 0).map(p => (
+                      <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 30px' }}>
+                         <span style={{ color: 'white', fontWeight: 'bold', fontSize: '1.3rem' }}>{p.name}</span>
+                         <div style={{ display: 'flex', gap: '10px' }}>
+                           {p.hole_cards.map((card, idx) => (
+                             <span key={idx} style={{ background: 'white', border: '1px solid #ccc', borderRadius: '8px', padding: '8px 15px', fontSize: '1.5rem', color: getCardColorClass(card) === 'red' ? '#e53935' : '#333', fontWeight: 'bold', boxShadow: '0 2px 5px rgba(0,0,0,0.5)' }}>{card}</span>
+                           ))}
+                         </div>
+                      </div>
+                   ))}
+                 </div>
+              </div>
+            )}
+
             <div style={{ display: 'flex', gap: '20px', justifyContent: 'center', marginTop: '10px' }}>
               {me && me.chips > 0 && (
                 <button className="btn-start" style={{ padding: '15px 40px', fontSize: '1.2rem', letterSpacing: '2px', boxShadow: '0 5px 15px rgba(76, 175, 80, 0.4)' }} onClick={() => handleAction("start")}>

@@ -11,6 +11,20 @@ class PokerEngine:
                     p.chips = 1000
                     p.revives_used += 1
             return
+        
+        if action == "show_cards":
+            if state.phase == GamePhase.SHOWDOWN:
+                for p in state.players:
+                    if p.id == player_id and hasattr(p, '_saved_hole_cards') and p._saved_hole_cards:
+                        p.hole_cards = list(p._saved_hole_cards)
+            return
+        
+        if action == "hide_cards":
+            if state.phase == GamePhase.SHOWDOWN:
+                for p in state.players:
+                    if p.id == player_id and hasattr(p, '_saved_hole_cards') and p._saved_hole_cards:
+                        p.hole_cards = []
+            return
             
         if state.phase in (GamePhase.WAITING, GamePhase.SHOWDOWN):
             if action == "start":
@@ -135,6 +149,9 @@ class PokerEngine:
             winner = participants_not_folded[0]
             winner.chips += state.pot
             state.showdown_results = [{"name": winner.name, "won": state.pot, "reason": "其余参赛者均弃牌(Fold)"}]
+            # Save cards and hide by default — winner can choose to show
+            winner._saved_hole_cards = list(winner.hole_cards)
+            winner.hole_cards = []
             return
             
         best_score = -1
