@@ -72,6 +72,10 @@ async def session_websocket(websocket: WebSocket, username: str):
     except WebSocketDisconnect:
         active_users.discard(username)
 
+@app.get("/api/users")
+async def get_users():
+    return {"users": list(active_users), "count": len(active_users)}
+
 @app.get("/api/tables")
 async def get_tables():
     result = []
