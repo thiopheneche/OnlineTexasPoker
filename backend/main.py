@@ -212,5 +212,7 @@ async def websocket_endpoint(websocket: WebSocket, table_id: str, client_id: str
                 del tables[table_id]
             if table_id in decks:
                 del decks[table_id]
+            if table_id in manager.active_connections:
+                del manager.active_connections[table_id]
         else:
             await manager.broadcast_state(table_id)
