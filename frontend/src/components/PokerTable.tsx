@@ -43,6 +43,8 @@ export const PokerTable: React.FC<Props> = ({ tableId, onLeave }) => {
   const [raiseAmount, setRaiseAmount] = useState<number>(0);
   const [bankruptTimer, setBankruptTimer] = useState<number | null>(null);
   const [isSpectating, setIsSpectating] = useState<boolean>(false);
+  const [hasWonGale, setHasWonGale] = useState<boolean>(false);
+  const [victoryDismissed, setVictoryDismissed] = useState<boolean>(false);
   const ws = useRef<WebSocket | null>(null);
 
   useEffect(() => {
@@ -93,6 +95,31 @@ export const PokerTable: React.FC<Props> = ({ tableId, onLeave }) => {
       return () => clearInterval(interval);
   }, [bankruptTimer, onLeave]);
 
+  // 终极赢家检测逻辑
+  useEffect(() => {
+    if (gameState && me) {
+      const isPhaseSafe = gameState.phase === "WAITING" || gameState.phase === "SHOWDOWN";
+      
+      const allOthersBusted = gameState.players.length >= 2 && gameState.players.filter(p => p.id !== clientId).every(p => {
+          // 一个对手彻底死亡的充分条件：已无筹码、已无复活、并且处于安全发奖期（或者他已经因为彻底战败而未下场参与这把牌）
+          return p.chips === 0 && p.revives_used >= 3 && (isPhaseSafe || !p.is_active);
+      });
+
+      if (allOthersBusted && !hasWonGale) {
+         setHasWonGale(true);
+      }
+      
+      // 如果已经处于赢家状态，但检测到有新的带着筹码的挑战者进来，重置状态
+      if (hasWonGale) {
+         const activeOpponents = gameState.players.filter(p => p.id !== clientId && p.chips > 0);
+         if (activeOpponents.length > 0) {
+             setHasWonGale(false);
+             setVictoryDismissed(false);
+         }
+      }
+    }
+  }, [gameState, me, clientId, hasWonGale]);
+
   if (!gameState) {
     return <div className="flex-center"><h2>🌀 正在接入牌桌 #{tableId}...</h2></div>;
   }
@@ -104,9 +131,6 @@ export const PokerTable: React.FC<Props> = ({ tableId, onLeave }) => {
   const disableControls = !isMyTurn || isWaitingOrShowdown;
 
   const showSettlement = gameState.phase === "SHOWDOWN" && gameState.showdown_results && gameState.showdown_results.length > 0;
-  
-  // 存活一人且其余全没钱没复活次，即触发吃鸡
-  const othersBusted = gameState.players.length >= 2 && gameState.players.filter(p => p.id !== clientId).every(p => p.chips === 0 && p.revives_used >= 3);
 
   return (
     <div className="poker-table-container">
@@ -141,7 +165,7 @@ export const PokerTable: React.FC<Props> = ({ tableId, onLeave }) => {
       )}
 
       {/* 结算弹窗 (仅对未破产或正在观战的人正常弹出) */}
-      {showSettlement && (!isBankrupt || isSpectating) && (
+      {showSettlement && (!isBankrupt || isSpectating) && !hasWonGale && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ background: '#222', padding: '40px', borderRadius: '15px', border: '2px solid gold', textAlign: 'center', minWidth: '350px' }}>
             <h1 style={{ color: 'gold', margin: '0 0 20px 0' }}>🏆 结算时间</h1>
@@ -160,13 +184,26 @@ export const PokerTable: React.FC<Props> = ({ tableId, onLeave }) => {
         </div>
       )}
       
-      {/* 终极大赢家 (置顶动画特效) */}
-      {othersBusted && me && me.chips > 0 && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(255,215,0,0.3)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-           <h1 style={{ fontSize: '4.5rem', color: 'gold', textShadow: '0px 0px 20px #000, 0px 0px 40px gold', textAlign: 'center' }}>
-               👑 绝对征服 👑 <br/>
-               <span style={{fontSize: '1.5rem', color:'white'}}>所有对手均已被您淘汰出局！</span>
-           </h1>
+      {/* 终极大赢家 交互式弹窗 */}
+      {hasWonGale && !victoryDismissed && me && me.chips > 0 && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(255,215,0,0.2)', backdropFilter: 'blur(5px)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+           <div style={{ background: 'linear-gradient(135deg, #2a2a2a, #111)', padding: '50px', borderRadius: '20px', border: '3px solid gold', textAlign: 'center', boxShadow: '0px 0px 50px rgba(255,215,0,0.4)', maxWidth: '500px' }}>
+             <h1 style={{ fontSize: '3.5rem', color: 'gold', textShadow: '0px 0px 15px gold', margin: '0 0 20px 0' }}>
+               👑 绝对征服 👑
+             </h1>
+             <p style={{ fontSize: '1.2rem', color: 'white', lineHeight: '1.6', marginBottom: '30px' }}>
+               全桌对手已悉数破产！您的统治已经确立，当前筹码堆积如山：<br/>
+               <span style={{ fontSize: '2rem', color: '#4caf50', fontWeight: 'bold', display: 'block', margin: '15px 0' }}>💰 {me.chips}</span>
+             </p>
+             <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                <button onClick={onLeave} style={{ padding: '15px', background: 'linear-gradient(to right, #e65c00, #F9D423)', color: 'white', border: 'none', borderRadius: '10px', fontSize: '1.2rem', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0px 5px 15px rgba(230, 92, 0, 0.4)'}}>
+                  🛑 带着荣誉离开 (退回大厅)
+                </button>
+                <button onClick={() => setVictoryDismissed(true)} style={{ padding: '15px', background: 'transparent', color: 'gold', border: '2px solid gold', borderRadius: '10px', fontSize: '1.2rem', cursor: 'pointer', fontWeight: 'bold'}}>
+                  🪑 傲视群雄 (留桌等待挑战者)
+                </button>
+             </div>
+           </div>
         </div>
       )}
 

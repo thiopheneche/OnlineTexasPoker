@@ -1,12 +1,13 @@
 from .game_state import GameState, GamePhase, Player
 from .deck import Deck
+import asyncio
 
 class PokerEngine:
     @staticmethod
-    def process_action(state: GameState, deck: Deck, player_id: str, action: str, amount: int = 0):
+    async def process_action(state: GameState, deck: Deck, player_id: str, action: str, amount: int = 0, broadcast_cb=None):
         if action == "revive":
             for p in state.players:
-                if p.id == player_id and p.chips == 0 and p.revives_used < 3:
+                if p.id == player_id and p.chips == 0 and getattr(p, "revives_used", 0) < 3:
                     p.chips = 1000
                     p.revives_used += 1
             return
@@ -73,7 +74,7 @@ class PokerEngine:
         else:
             return
 
-        PokerEngine._advance_turn_or_phase(state, deck)
+        await PokerEngine._advance_turn_or_phase(state, deck, broadcast_cb)
 
     @staticmethod
     def _start_new_hand(state: GameState, deck: Deck):
@@ -100,6 +101,9 @@ class PokerEngine:
                 p.hole_cards = []
 
         actual_players = [p for p in state.players if p.is_active]
+        if len(actual_players) < 2:
+            return
+            
         state.button_index = (state.button_index + 1) % len(actual_players)
         
         sb_player = actual_players[state.button_index]
@@ -162,7 +166,7 @@ class PokerEngine:
             state.showdown_results = []
 
     @staticmethod
-    def _advance_turn_or_phase(state: GameState, deck: Deck):
+    async def _advance_turn_or_phase(state: GameState, deck: Deck, broadcast_cb):
         active_players = [p for p in state.players if p.is_active]
         if len(active_players) <= 1:
             PokerEngine._execute_showdown(state)
@@ -189,14 +193,14 @@ class PokerEngine:
             
             players_with_chips = [p for p in active_players if p.chips > 0]
             if len(players_with_chips) <= 1:
-                PokerEngine._fast_forward_to_showdown(state, deck)
+                await PokerEngine._fast_forward_to_showdown(state, deck, broadcast_cb)
             else:
                 PokerEngine._next_phase(state, deck)
         else:
             PokerEngine._find_next_active_player(state)
 
     @staticmethod
-    def _fast_forward_to_showdown(state: GameState, deck: Deck):
+    async def _fast_forward_to_showdown(state: GameState, deck: Deck, broadcast_cb):
         for p in state.players:
             p.current_bet = 0
             p.has_acted = True
@@ -220,6 +224,11 @@ class PokerEngine:
                 break
             else:
                 break
+                
+            if broadcast_cb:
+                await broadcast_cb()
+            # 缩短等待间隙，由 5s 变为 3s
+            await asyncio.sleep(3)
 
     @staticmethod
     def _next_phase(state: GameState, deck: Deck):

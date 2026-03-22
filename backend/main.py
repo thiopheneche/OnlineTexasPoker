@@ -95,6 +95,9 @@ async def websocket_endpoint(websocket: WebSocket, table_id: str, client_id: str
                 
     await manager.broadcast_state(table_id)
     
+    async def cb():
+        await manager.broadcast_state(table_id)
+
     try:
         while True:
             data_str = await websocket.receive_text()
@@ -103,7 +106,7 @@ async def websocket_endpoint(websocket: WebSocket, table_id: str, client_id: str
                 action = action_data.get("action")
                 amount = action_data.get("amount", 0)
                 
-                PokerEngine.process_action(global_game_state, global_deck, client_id, action, amount)
+                await PokerEngine.process_action(global_game_state, global_deck, client_id, action, amount, cb)
                         
             except json.JSONDecodeError:
                 pass
@@ -116,6 +119,6 @@ async def websocket_endpoint(websocket: WebSocket, table_id: str, client_id: str
         if global_game_state.phase in (GamePhase.WAITING, GamePhase.SHOWDOWN):
             global_game_state.players = [p for p in global_game_state.players if p.id != client_id]
         else:
-            PokerEngine.process_action(global_game_state, global_deck, client_id, "fold", 0)
+            await PokerEngine.process_action(global_game_state, global_deck, client_id, "fold", 0, cb)
 
         await manager.broadcast_state(table_id)
