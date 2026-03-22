@@ -48,7 +48,7 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
   const ws = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    ws.current = new WebSocket(`wss://texaspokers.thiopheneche.dpdns.org/ws/${tableId}/${clientId}`);
+    ws.current = new WebSocket(`wss://texaspoker.thiopheneche.dpdns.org/ws/${tableId}/${clientId}`);
     ws.current.onmessage = (event) => {
       try {
         const data: GameState = JSON.parse(event.data);
