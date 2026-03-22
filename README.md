@@ -41,30 +41,12 @@
 
 ---
 
-## 🚀 快速启动指南 (Quick Start)
+## 🚀 开始游戏 (Play Now)
 
-### 后端 (Backend) - FastAPI
-1. 确保安装好 Python 3.9+ 环境。
-2. 安装依赖：
-   ```bash
-   cd backend
-   pip install -r requirements.txt
-   ```
-3. 启动异步服务器：
-   ```bash
-   uvicorn main:app --reload
-   ```
-> 服务器将运行在 `http://localhost:8000` 并开放全局 `ws://` 端口。
+👉 **立即访问我们的专属在线站点开始您的德扑之旅：**  
+[**https://texaspoker.thiopheneche.dpdns.org**](https://texaspoker.thiopheneche.dpdns.org)
 
-### 前端 (Frontend) - React + Vite
-1. 确保安装好 Node.js。
-2. 安装依赖并启动开发服务器：
-   ```bash
-   cd frontend
-   npm install
-   npm run dev
-   ```
-3. 打开浏览器访问控制台内提供的网址（默认一般为 `http://localhost:5173`），输入你的名字，随时开战！
+*(免去了所有本地部署与环境配置烦恼！只需在您的 PC 或手机浏览器里打开上述链接，输入您的玩家 ID 即可瞬间化身为赌神入座！)*
 
 ---
 

@@ -137,9 +137,15 @@ async def websocket_endpoint(websocket: WebSocket, table_id: str, client_id: str
     except WebSocketDisconnect:
         manager.disconnect(websocket, table_id)
         
-        if global_game_state.phase in (GamePhase.WAITING, GamePhase.SHOWDOWN):
-            global_game_state.players = [p for p in global_game_state.players if p.id != client_id]
-        else:
+        if global_game_state.phase not in (GamePhase.WAITING, GamePhase.SHOWDOWN):
             await PokerEngine.process_action(global_game_state, global_deck, client_id, "fold", 0, cb)
-
-        await manager.broadcast_state(table_id)
+            
+        global_game_state.players = [p for p in global_game_state.players if p.id != client_id]
+        
+        if len(global_game_state.players) == 0:
+            if table_id in tables:
+                del tables[table_id]
+            if table_id in decks:
+                del decks[table_id]
+        else:
+            await manager.broadcast_state(table_id)
