@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { PlusCircle, LogIn, RefreshCcw, Users, Gem } from 'lucide-react';
 import { DisclaimerModal } from './Disclaimer';
+import { TutorialModal } from './Tutorial';
 
 type TableInfo = {
   table_id: string;
@@ -109,7 +110,10 @@ export const Lobby: React.FC<Props> = ({ onJoinTable, username, globalChips, set
             <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>全局筹码</span>
           </div>
         </div>
-        <DisclaimerModal trigger="banner" />
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+          <TutorialModal variant="site" trigger="banner" />
+          <DisclaimerModal trigger="banner" />
+        </div>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
           
           <div style={{ display: 'flex', alignItems: 'center', gap: '5px', background: 'rgba(0,0,0,0.3)', padding: '5px 10px', borderRadius: '8px' }}>

@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Coins, Play, UserCircle, LogOut, Check, ArrowUpCircle, XCircle, MessageSquare, Send } from 'lucide-react';
+import { TutorialModal } from './Tutorial';
 
 export type Player = {
   id: string;
@@ -477,6 +478,7 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
            <button onClick={onLeave} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: 'var(--text-main)', padding: '10px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap:'5px' }}>
              <LogOut size={16} /> 退大厅
            </button>
+           <TutorialModal variant="rules" trigger="button" />
            <h1>💎 牌桌 #{tableId}</h1>
         </div>
         <div className="turn-indicator">

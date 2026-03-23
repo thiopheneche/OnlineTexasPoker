@@ -41,10 +41,26 @@ class PokerEngine:
         await asyncio.sleep(2)
 
     @staticmethod
+    async def _deal_cards_together(target_cards: list, cards_to_deal: list, broadcast_cb):
+        if not cards_to_deal:
+            return
+        target_cards.extend(cards_to_deal)
+        await PokerEngine._broadcast_animation_step(broadcast_cb)
+
+    @staticmethod
     async def _deal_cards_one_by_one(target_cards: list, cards_to_deal: list, broadcast_cb):
         for card in cards_to_deal:
             target_cards.append(card)
             await PokerEngine._broadcast_animation_step(broadcast_cb)
+
+    @staticmethod
+    async def _deal_runout_with_flop_grouping(target_cards: list, cards_to_deal: list, broadcast_cb):
+        if len(target_cards) == 0 and len(cards_to_deal) >= 3:
+            await PokerEngine._deal_cards_together(target_cards, cards_to_deal[:3], broadcast_cb)
+            await PokerEngine._deal_cards_one_by_one(target_cards, cards_to_deal[3:], broadcast_cb)
+            return
+
+        await PokerEngine._deal_cards_one_by_one(target_cards, cards_to_deal, broadcast_cb)
 
     @staticmethod
     async def process_action(state: GameState, deck: Deck, player_id: str, action: str, amount: int = 0, broadcast_cb=None):
@@ -371,7 +387,7 @@ class PokerEngine:
         while state.phase != GamePhase.SHOWDOWN:
             if state.phase == GamePhase.PREFLOP:
                 state.phase = GamePhase.FLOP
-                await PokerEngine._deal_cards_one_by_one(
+                await PokerEngine._deal_cards_together(
                     state.community_cards,
                     [str(c) for c in deck.deal(3)],
                     broadcast_cb
@@ -417,12 +433,12 @@ class PokerEngine:
         state.run_twice_boards = [list(base_cards), list(base_cards)]
         state.phase = GamePhase.RIVER
 
-        await PokerEngine._deal_cards_one_by_one(
+        await PokerEngine._deal_runout_with_flop_grouping(
             state.run_twice_boards[0],
             board1[len(base_cards):],
             broadcast_cb
         )
-        await PokerEngine._deal_cards_one_by_one(
+        await PokerEngine._deal_runout_with_flop_grouping(
             state.run_twice_boards[1],
             board2[len(base_cards):],
             broadcast_cb

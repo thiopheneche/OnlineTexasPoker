@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { PokerTable } from './components/PokerTable';
 import { Lobby } from './components/Lobby';
 import { DisclaimerModal } from './components/Disclaimer';
+import { TutorialModal } from './components/Tutorial';
 
 function App() {
   const [currentTableId, setCurrentTableId] = useState<string | null>(null);
@@ -82,7 +83,8 @@ function App() {
                进入大厅 (Enter)
              </button>
           </form>
-          <div style={{ marginTop: '20px' }}>
+          <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'center', gap: '16px', flexWrap: 'wrap' }}>
+            <TutorialModal variant="site" trigger="link" />
             <DisclaimerModal trigger="link" />
           </div>
           <p style={{ fontSize: '0.8rem', color: 'gray', marginTop: '15px', lineHeight: '1.5' }}>
