@@ -121,6 +121,19 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
   const renderAnimatedCommunityCard = (card: string, key: string | number) => (
     <div key={key} className={`card community dealing ${getCardColorClass(card)}`}>{card}</div>
   );
+  const renderCoveredHoleCard = (key: string | number) => (
+    <div
+      key={key}
+      className="card-back-shell"
+      style={{ width: 'clamp(35px, 5vw, 55px)', height: 'clamp(50px, 7vw, 78px)' }}
+    >
+      <div className="card-back-face">
+        <div className="card-back-core">
+          <span className="card-back-glyph">♠</span>
+        </div>
+      </div>
+    </div>
+  );
 
   const me = gameState?.players.find(p => p.id === clientId);
   const currentTurnPlayer = gameState?.players[gameState.current_turn_index] || null;
@@ -564,7 +577,7 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
                     ))
                   ) : (
                     me.hole_cards.map((_, idx) => (
-                      <div key={idx} style={{ width: 'clamp(35px, 5vw, 55px)', height: 'clamp(50px, 7vw, 78px)', background: 'linear-gradient(135deg, #1a237e, #283593)', borderRadius: '8px', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: 'clamp(1rem, 2vw, 1.5rem)', boxShadow: '0 2px 8px rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.15)' }}>🂠</div>
+                      renderCoveredHoleCard(idx)
                     ))
                   )
                 ) : (

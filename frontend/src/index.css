@@ -196,6 +196,72 @@ html, body {
   backface-visibility: hidden;
 }
 
+.card-back-shell {
+  position: relative;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.45);
+  flex-shrink: 0;
+}
+
+.card-back-face {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  overflow: hidden;
+  background:
+    linear-gradient(145deg, #120203 0%, #2f070b 34%, #5c0f17 52%, #1b0305 100%);
+  border: 1px solid rgba(255, 245, 245, 0.14);
+}
+
+.card-back-face::before {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 235, 235, 0.15);
+  background:
+    radial-gradient(circle at center, rgba(255, 244, 244, 0.08) 0, rgba(255, 244, 244, 0.02) 26%, transparent 54%),
+    repeating-linear-gradient(45deg, rgba(255, 228, 228, 0.045) 0 2px, transparent 2px 10px),
+    repeating-linear-gradient(-45deg, rgba(255, 228, 228, 0.035) 0 2px, transparent 2px 10px),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.14), rgba(255, 255, 255, 0.02) 48%, rgba(0, 0, 0, 0.16));
+}
+
+.card-back-face::after {
+  content: '';
+  position: absolute;
+  inset: 11px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 235, 235, 0.08);
+}
+
+.card-back-core {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  width: 46%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%) rotate(45deg);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 240, 240, 0.22);
+  background:
+    linear-gradient(135deg, rgba(15, 2, 3, 0.92), rgba(138, 22, 34, 0.88));
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.16),
+    0 8px 18px rgba(0, 0, 0, 0.22);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.card-back-glyph {
+  transform: rotate(-45deg);
+  color: rgba(255, 245, 245, 0.92);
+  font-size: clamp(0.7rem, 1.2vw, 1rem);
+  font-weight: 700;
+  line-height: 1;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.28);
+}
+
 .card.empty {
   background: rgba(0,0,0,0.25);
   border: 2px dashed rgba(255,255,255,0.2);
