@@ -1,17 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { PokerTable } from './components/PokerTable';
 import { Lobby } from './components/Lobby';
+import { DisclaimerModal } from './components/Disclaimer';
+import { TutorialModal } from './components/Tutorial';
 
 function App() {
   const [currentTableId, setCurrentTableId] = useState<string | null>(null);
   const [username, setUsername] = useState<string>('');
   const [loginInput, setLoginInput] = useState<string>('');
   const [loginError, setLoginError] = useState<string>('');
+  const [globalChips, setGlobalChips] = useState<number>(0);
 
   useEffect(() => {
     if (username) {
       // 建立常驻 Session 心跳
-      const sessionWs = new WebSocket(`ws://localhost:8000/ws/session/${username}`);
+      const sessionWs = new WebSocket(`wss://texaspoker.thiopheneche.dpdns.org/ws/session/${username}`);
       sessionWs.onclose = () => {
          // 自动处理异常断线（静默不打扰用户当前游戏）
       };
@@ -19,11 +22,31 @@ function App() {
     }
   }, [username]);
 
+  const refreshChips = useCallback(async () => {
+    if (!username) return;
+    try {
+      const res = await fetch(`https://texaspoker.thiopheneche.dpdns.org/api/chips/${username}`);
+      if (res.ok) {
+        const data = await res.json();
+        setGlobalChips(data.global_chips);
+      }
+    } catch (e) {
+      console.error("Failed to fetch chips", e);
+    }
+  }, [username]);
+
+  // Refresh chips when returning to lobby
+  useEffect(() => {
+    if (username && !currentTableId) {
+      refreshChips();
+    }
+  }, [username, currentTableId, refreshChips]);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!loginInput.trim()) return;
     try {
-      const res = await fetch('http://localhost:8000/login', {
+      const res = await fetch('https://texaspoker.thiopheneche.dpdns.org/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: loginInput.trim() })
@@ -31,6 +54,7 @@ function App() {
       const data = await res.json();
       if (data.success) {
         setUsername(loginInput.trim());
+        setGlobalChips(data.global_chips ?? 5);
       } else {
         setLoginError(data.error || "ID 已被在线玩家占用，请换个名称！");
       }
@@ -59,8 +83,12 @@ function App() {
                进入大厅 (Enter)
              </button>
           </form>
-          <p style={{ fontSize: '0.8rem', color: 'gray', marginTop: '20px', lineHeight: '1.5' }}>
-            注：您的 ID 采取“用完即焚”机制。全站仅在您保持浏览期间独占此名称，关闭或刷新网页将自动断线将其释放！
+          <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'center', gap: '16px', flexWrap: 'wrap' }}>
+            <TutorialModal variant="site" trigger="link" />
+            <DisclaimerModal trigger="link" />
+          </div>
+          <p style={{ fontSize: '0.8rem', color: 'gray', marginTop: '15px', lineHeight: '1.5' }}>
+            注：您的 ID 采取"用完即焚"机制。全站仅在您保持浏览期间独占此名称，关闭或刷新网页将自动断线将其释放！
           </p>
         </div>
       </div>
@@ -76,7 +104,12 @@ function App() {
           onLeave={() => setCurrentTableId(null)} 
         />
       ) : (
-        <Lobby onJoinTable={(id) => setCurrentTableId(id)} />
+        <Lobby 
+          onJoinTable={(id) => setCurrentTableId(id)} 
+          username={username}
+          globalChips={globalChips}
+          setGlobalChips={setGlobalChips}
+        />
       )}
     </div>
   );

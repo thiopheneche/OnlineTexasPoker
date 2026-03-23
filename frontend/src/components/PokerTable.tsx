@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Coins, Play, UserCircle, LogOut, Check, ArrowUpCircle, XCircle } from 'lucide-react';
+import { Coins, Play, UserCircle, LogOut, Check, ArrowUpCircle, XCircle, MessageSquare, Send } from 'lucide-react';
+import { TutorialModal } from './Tutorial';
 
 export type Player = {
   id: string;
@@ -17,6 +18,7 @@ export type ShowdownResult = {
   name: string;
   won: number;
   reason: string;
+  run?: number;
 };
 
 export type GameState = {
@@ -30,6 +32,16 @@ export type GameState = {
   players: Player[];
   button_index: number;
   current_turn_index: number;
+  first_allin_player_id: string;
+  awaiting_run_twice: boolean;
+  run_it_twice: number;
+  run_twice_boards: string[][];
+};
+
+type ChatMessage = {
+  sender: string;
+  message: string;
+  timestamp: number;
 };
 
 type Props = {
@@ -45,18 +57,43 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
   const [isSpectating, setIsSpectating] = useState<boolean>(false);
   const [hasWonGale, setHasWonGale] = useState<boolean>(false);
   const [victoryDismissed, setVictoryDismissed] = useState<boolean>(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState<string>('');
+  const [chatOpen, setChatOpen] = useState<boolean>(false);
+  const [unreadCount, setUnreadCount] = useState<number>(0);
+  const [cardsRevealed, setCardsRevealed] = useState<boolean>(false);
+  const peekTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ws = useRef<WebSocket | null>(null);
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    ws.current = new WebSocket(`ws://localhost:8000/ws/${tableId}/${clientId}`);
+    ws.current = new WebSocket(`wss://texaspoker.thiopheneche.dpdns.org/ws/${tableId}/${clientId}`);
     ws.current.onmessage = (event) => {
       try {
-        const data: GameState = JSON.parse(event.data);
-        setGameState(data);
+        const data = JSON.parse(event.data);
+        if (data.type === 'chat') {
+          const msg: ChatMessage = { sender: data.sender, message: data.message, timestamp: Date.now() };
+          setChatMessages(prev => [...prev.slice(-99), msg]);
+          if (!chatOpen) {
+            setUnreadCount(prev => prev + 1);
+          }
+        } else {
+          setGameState(data as GameState);
+        }
       } catch (e) { console.error("Failed to parse", e); }
     };
     return () => ws.current?.close();
   }, [tableId, clientId]);
+
+  // Auto-scroll chat to bottom
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatMessages]);
+
+  // Clear unread when chat is opened
+  useEffect(() => {
+    if (chatOpen) setUnreadCount(0);
+  }, [chatOpen]);
 
   useEffect(() => {
      if(gameState) setRaiseAmount(gameState.current_highest_bet + gameState.min_raise);
@@ -66,7 +103,37 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
       ws.current?.send(JSON.stringify({ action, amount }));
   };
 
+  const sendChat = () => {
+    const msg = chatInput.trim();
+    if (!msg || !ws.current) return;
+    ws.current.send(JSON.stringify({ action: 'chat', message: msg }));
+    setChatInput('');
+  };
+
+  const handleChatKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendChat();
+    }
+  };
+
   const getCardColorClass = (card: string) => (card.includes('♥') || card.includes('♦')) ? 'red' : '';
+  const renderAnimatedCommunityCard = (card: string, key: string | number) => (
+    <div key={key} className={`card community dealing ${getCardColorClass(card)}`}>{card}</div>
+  );
+  const renderCoveredHoleCard = (key: string | number) => (
+    <div
+      key={key}
+      className="card-back-shell"
+      style={{ width: 'clamp(35px, 5vw, 55px)', height: 'clamp(50px, 7vw, 78px)' }}
+    >
+      <div className="card-back-face">
+        <div className="card-back-core">
+          <span className="card-back-glyph">♠</span>
+        </div>
+      </div>
+    </div>
+  );
 
   const me = gameState?.players.find(p => p.id === clientId);
   const currentTurnPlayer = gameState?.players[gameState.current_turn_index] || null;
@@ -93,27 +160,16 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
       return () => clearInterval(interval);
   }, [bankruptTimer, onLeave]);
 
-  // 终极赢家检测逻辑
   useEffect(() => {
     if (gameState && me) {
       const isPhaseSafe = gameState.phase === "WAITING" || gameState.phase === "SHOWDOWN";
-      
       const allOthersBusted = gameState.players.length >= 2 && gameState.players.filter(p => p.id !== clientId).every(p => {
-          // 一个对手彻底死亡的充分条件：已无筹码、已无复活、并且处于安全发奖期（或者他已经因为彻底战败而未下场参与这把牌）
           return p.chips === 0 && p.revives_used >= 3 && (isPhaseSafe || !p.is_active);
       });
-
-      if (allOthersBusted && !hasWonGale) {
-         setHasWonGale(true);
-      }
-      
-      // 如果已经处于赢家状态，但检测到有新的带着筹码的挑战者进来，重置状态
+      if (allOthersBusted && !hasWonGale) setHasWonGale(true);
       if (hasWonGale) {
          const activeOpponents = gameState.players.filter(p => p.id !== clientId && p.chips > 0);
-         if (activeOpponents.length > 0) {
-             setHasWonGale(false);
-             setVictoryDismissed(false);
-         }
+         if (activeOpponents.length > 0) { setHasWonGale(false); setVictoryDismissed(false); }
       }
     }
   }, [gameState, me, clientId, hasWonGale]);
@@ -124,14 +180,117 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
 
   const isMyTurn = currentTurnPlayer?.id === clientId;
   const isWaitingOrShowdown = gameState.phase === "WAITING" || gameState.phase === "SHOWDOWN";
-  
   const canCheck = me && (me.current_bet === gameState.current_highest_bet);
   const disableControls = !isMyTurn || isWaitingOrShowdown;
-
   const showSettlement = gameState.phase === "SHOWDOWN" && gameState.showdown_results && gameState.showdown_results.length > 0;
+  const minRaiseTotal = gameState.current_highest_bet + gameState.min_raise;
+  const maxRaiseTotal = me ? me.chips + me.current_bet : 0;
+  const showRunTwiceBoards = gameState.run_it_twice === 2 && gameState.run_twice_boards.length === 2 && gameState.run_twice_boards.some(board => board.length > 0);
+  const runTwiceBaseCount = gameState.community_cards.length;
+
+  const presetBtnStyle: React.CSSProperties = {
+    padding: '3px 8px', fontSize: '0.75rem', background: 'rgba(255,255,255,0.15)',
+    color: '#ccc', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '6px',
+    cursor: 'pointer', whiteSpace: 'nowrap'
+  };
 
   return (
-    <div className="poker-table-container">
+    <div className="poker-table-container" style={{ position: 'relative' }}>
+
+      {/* ===== 聊天浮动按钮 ===== */}
+      <button 
+        onClick={() => setChatOpen(!chatOpen)} 
+        style={{ 
+          position: 'fixed', bottom: '160px', right: '30px', zIndex: 9999,
+          width: '50px', height: '50px', borderRadius: '50%', border: 'none',
+          background: chatOpen ? 'var(--accent)' : 'var(--primary)', color: '#000',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          cursor: 'pointer', boxShadow: '0 4px 15px rgba(0,0,0,0.4)',
+          transition: 'all 0.2s'
+        }}
+      >
+        <MessageSquare size={22} />
+        {unreadCount > 0 && !chatOpen && (
+          <span style={{
+            position: 'absolute', top: '-5px', right: '-5px', background: 'var(--danger)',
+            color: 'white', borderRadius: '50%', width: '22px', height: '22px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '0.75rem', fontWeight: 'bold'
+          }}>{unreadCount > 9 ? '9+' : unreadCount}</span>
+        )}
+      </button>
+
+      {/* ===== 聊天面板 ===== */}
+      {chatOpen && (
+        <div style={{
+          position: 'fixed', bottom: '220px', right: '30px', zIndex: 9998,
+          width: '320px', height: '360px', background: 'rgba(20,20,20,0.95)',
+          borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)',
+          display: 'flex', flexDirection: 'column', overflow: 'hidden',
+          boxShadow: '0 10px 40px rgba(0,0,0,0.6)', backdropFilter: 'blur(10px)'
+        }}>
+          {/* 聊天头部 */}
+          <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontWeight: 'bold', color: 'var(--accent)', fontSize: '0.95rem' }}>💬 牌桌聊天</span>
+            <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{chatMessages.length} 条消息</span>
+          </div>
+          {/* 消息列表 */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {chatMessages.length === 0 ? (
+              <div style={{ textAlign: 'center', color: 'var(--text-muted)', marginTop: '40px', fontSize: '0.9rem' }}>
+                暂无消息，和对手互搏一下吧！
+              </div>
+            ) : (
+              chatMessages.map((msg, idx) => {
+                const isMe = msg.sender === clientId;
+                return (
+                  <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
+                    <span style={{ fontSize: '0.7rem', color: isMe ? 'var(--accent)' : 'var(--text-muted)', marginBottom: '2px' }}>
+                      {isMe ? '你' : msg.sender}
+                    </span>
+                    <div style={{
+                      maxWidth: '85%', padding: '8px 12px', borderRadius: isMe ? '12px 12px 2px 12px' : '12px 12px 12px 2px',
+                      background: isMe ? 'rgba(3,218,198,0.2)' : 'rgba(255,255,255,0.1)',
+                      color: 'var(--text-main)', fontSize: '0.9rem', wordBreak: 'break-word', lineHeight: '1.4'
+                    }}>
+                      {msg.message}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+            <div ref={chatEndRef} />
+          </div>
+          {/* 输入框 */}
+          <div style={{ padding: '10px 12px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', gap: '8px' }}>
+            <input
+              type="text"
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              onKeyDown={handleChatKeyDown}
+              placeholder="说点什么..."
+              maxLength={200}
+              style={{
+                flex: 1, padding: '8px 12px', background: 'rgba(255,255,255,0.08)',
+                border: '1px solid rgba(255,255,255,0.15)', borderRadius: '8px',
+                color: 'white', fontSize: '0.9rem', outline: 'none'
+              }}
+            />
+            <button
+              onClick={sendChat}
+              disabled={!chatInput.trim()}
+              style={{
+                padding: '8px 12px', background: chatInput.trim() ? 'var(--accent)' : 'rgba(255,255,255,0.1)',
+                color: chatInput.trim() ? '#000' : '#555', border: 'none', borderRadius: '8px',
+                cursor: chatInput.trim() ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center',
+                transition: 'all 0.2s'
+              }}
+            >
+              <Send size={16} />
+            </button>
+          </div>
+        </div>
+      )}
       
       {/* 破产复活弹窗 */}
       {isBankrupt && !isSpectating && me && (
@@ -162,71 +321,155 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
         </div>
       )}
 
-      {/* 结算弹窗 (仅对未破产或正在观战的人正常弹出) */}
-      {showSettlement && (!isBankrupt || isSpectating) && !hasWonGale && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: '#111', padding: '40px', borderRadius: '20px', border: '2px solid gold', textAlign: 'center', minWidth: '500px', boxShadow: '0 10px 40px rgba(255, 215, 0, 0.2)', maxHeight: '90vh', overflowY: 'auto' }}>
-            <h1 style={{ color: 'gold', margin: '0 0 30px 0', fontSize: '2.5rem', textShadow: '0 2px 10px rgba(255, 215, 0, 0.3)' }}>🏆 巅峰决战 🏆</h1>
-            
-            {/* 公共牌区 */}
-            {gameState.community_cards.length > 0 && (
-              <div style={{ marginBottom: '30px', padding: '20px', background: 'rgba(255,255,255,0.05)', borderRadius: '15px' }}>
-                <h4 style={{ color: 'var(--text-muted)', margin: '0 0 15px 0', fontSize: '1.1rem' }}>🌍 公共牌面 🌍</h4>
+      {/* 发两次决定弹窗 */}
+      {gameState && gameState.awaiting_run_twice && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: 'linear-gradient(135deg, #1a1a2e, #16213e)', padding: '40px', borderRadius: '20px', border: '2px solid var(--accent)', textAlign: 'center', minWidth: '400px', maxWidth: '550px', boxShadow: '0 10px 40px rgba(3,218,198,0.3)' }}>
+            <h1 style={{ color: 'var(--accent)', margin: '0 0 15px 0', fontSize: '2rem' }}>🃏 发牌次数选择 🃏</h1>
+            <p style={{ color: 'var(--text-muted)', marginBottom: '10px', fontSize: '0.95rem' }}>当前底池: <strong style={{ color: '#ffd700' }}>💰 {gameState.pot}</strong></p>
+            {gameState.first_allin_player_id === clientId ? (
+              <>
+                <p style={{ color: '#ddd', marginBottom: '25px', lineHeight: '1.6', fontSize: '0.95rem' }}>
+                  您是第一个 All-In 的玩家，请选择剩余公共牌的发牌次数：
+                </p>
                 <div style={{ display: 'flex', gap: '15px', justifyContent: 'center' }}>
-                  {gameState.community_cards.map((card, idx) => (
-                    <div key={idx} className={`card community ${getCardColorClass(card)}`} style={{ transform: 'none', width: '60px', height: '84px', fontSize: '1.5rem', boxShadow: '0 4px 10px rgba(0,0,0,0.5)' }}>
-                      {card}
-                    </div>
-                  ))}
+                  <button onClick={() => handleAction("run_once")} style={{ padding: '15px 30px', background: 'linear-gradient(135deg, #4caf50, #2e7d32)', color: 'white', border: 'none', borderRadius: '12px', fontSize: '1.1rem', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 15px rgba(76,175,80,0.4)', flex: 1 }}>
+                    🎲 发一次
+                    <div style={{ fontSize: '0.75rem', fontWeight: 'normal', marginTop: '5px', opacity: 0.8 }}>正常结算</div>
+                  </button>
+                  <button onClick={() => handleAction("run_twice")} style={{ padding: '15px 30px', background: 'linear-gradient(135deg, #e65c00, #F9D423)', color: 'white', border: 'none', borderRadius: '12px', fontSize: '1.1rem', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 15px rgba(230,92,0,0.4)', flex: 1 }}>
+                    🎲🎲 发两次
+                    <div style={{ fontSize: '0.75rem', fontWeight: 'normal', marginTop: '5px', opacity: 0.8 }}>底池对半结算</div>
+                  </button>
                 </div>
-              </div>
-            )}
-
-            {/* 开奖名单 */}
-            <div style={{ marginBottom: '30px' }}>
-              {gameState.showdown_results.map((r, idx) => (
-                <div key={idx} style={{ marginBottom: '15px', fontSize: '1.4rem' }}>
-                  赢家 <strong style={{ color: 'var(--accent)' }}>{r.name}</strong> 依靠 <span style={{color:'white', fontWeight:'bold'}}>{r.reason}</span> <br/>
-                  通吃 <span style={{ color: '#4caf50', fontWeight: 'bold' }}>💰 {r.won}</span> 筹码！
-                </div>
-              ))}
-            </div>
-
-            {/* 剩余摊牌玩家底牌展示 */}
-            <div style={{ marginBottom: '30px', padding: '20px', background: 'rgba(0,0,0,0.4)', borderRadius: '15px', border: '1px solid rgba(255,255,255,0.1)' }}>
-               <h4 style={{ color: 'var(--text-muted)', margin: '0 0 20px 0', fontSize: '1.1rem' }}>🃏 最终拼杀底牌揭晓 🃏</h4>
-               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                 {gameState.players.filter(p => p.is_active && p.hole_cards && p.hole_cards.length > 0).map(p => (
-                    <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 30px' }}>
-                       <span style={{ color: 'white', fontWeight: 'bold', fontSize: '1.3rem' }}>{p.name}</span>
-                       <div style={{ display: 'flex', gap: '10px' }}>
-                         {p.hole_cards.map((card, idx) => (
-                           <span key={idx} style={{ background: 'white', border: '1px solid #ccc', borderRadius: '8px', padding: '8px 15px', fontSize: '1.5rem', color: getCardColorClass(card) === 'red' ? '#e53935' : '#333', fontWeight: 'bold', boxShadow: '0 2px 5px rgba(0,0,0,0.5)' }}>
-                             {card}
-                           </span>
-                         ))}
-                       </div>
-                    </div>
-                 ))}
-               </div>
-            </div>
-
-            {me && me.chips > 0 && (
-              <button className="btn-start" style={{ marginTop: '10px', padding: '20px 50px', fontSize: '1.3rem', letterSpacing: '2px', boxShadow: '0 5px 15px rgba(76, 175, 80, 0.4)' }} onClick={() => handleAction("start")}>
-                <Play size={20} /> 新的一局
-              </button>
+              </>
+            ) : (
+              <p style={{ color: '#ddd', fontSize: '1.1rem', animation: 'pulse 1.5s infinite' }}>
+                ✉️ 等待 <strong style={{ color: 'var(--accent)' }}>{gameState.players.find(p => p.id === gameState.first_allin_player_id)?.name || 'All-In玩家'}</strong> 选择发牌次数...
+              </p>
             )}
           </div>
         </div>
       )}
+
+      {/* 结算弹窗 */}
+      {showSettlement && (!isBankrupt || isSpectating) && !hasWonGale && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#111', padding: '40px', borderRadius: '20px', border: '2px solid gold', textAlign: 'center', minWidth: '500px', boxShadow: '0 10px 40px rgba(255, 215, 0, 0.2)', maxHeight: '90vh', overflowY: 'auto' }}>
+            <h1 style={{ color: 'gold', margin: '0 0 30px 0', fontSize: '2.5rem', textShadow: '0 2px 10px rgba(255, 215, 0, 0.3)' }}>🏆 巅峰决战 🏆</h1>
+
+            {/* 发两次的双板展示 */}
+            {gameState.run_it_twice === 2 && gameState.run_twice_boards && gameState.run_twice_boards.length === 2 ? (
+              <>
+                {[0, 1].map(runIdx => (
+                  <div key={runIdx} style={{ marginBottom: '20px', padding: '15px', background: runIdx === 0 ? 'rgba(76,175,80,0.1)' : 'rgba(33,150,243,0.1)', borderRadius: '15px', border: `1px solid ${runIdx === 0 ? 'rgba(76,175,80,0.3)' : 'rgba(33,150,243,0.3)'}` }}>
+                    <h4 style={{ color: runIdx === 0 ? '#4caf50' : '#2196f3', margin: '0 0 10px 0', fontSize: '1rem' }}>
+                      {runIdx === 0 ? '🃏 第一次发牌' : '🃏 第二次发牌'} · 底池 {runIdx === 0 ? Math.floor(gameState.pot / 2) : gameState.pot - Math.floor(gameState.pot / 2)}
+                    </h4>
+                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginBottom: '10px' }}>
+                      {gameState.run_twice_boards[runIdx].map((card, cidx) => (
+                        <div key={cidx} className={`card community ${getCardColorClass(card)}`} style={{ transform: 'none', width: '50px', height: '70px', fontSize: '1.2rem', boxShadow: '0 2px 8px rgba(0,0,0,0.5)' }}>{card}</div>
+                      ))}
+                    </div>
+                    {gameState.showdown_results.filter(r => r.run === runIdx + 1).map((r, idx) => (
+                      <div key={idx} style={{ fontSize: '1.1rem', marginTop: '5px' }}>
+                        赢家 <strong style={{ color: 'var(--accent)' }}>{r.name}</strong> 依靠 <span style={{ color: 'white', fontWeight: 'bold' }}>{r.reason}</span> → <span style={{ color: '#4caf50', fontWeight: 'bold' }}>💰 {r.won}</span>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </>
+            ) : (
+              <>
+                {gameState.community_cards.length > 0 && (
+                  <div style={{ marginBottom: '30px', padding: '20px', background: 'rgba(255,255,255,0.05)', borderRadius: '15px' }}>
+                    <h4 style={{ color: 'var(--text-muted)', margin: '0 0 15px 0', fontSize: '1.1rem' }}>🌍 公共牌面 🌍</h4>
+                    <div style={{ display: 'flex', gap: '15px', justifyContent: 'center' }}>
+                      {gameState.community_cards.map((card, idx) => (
+                        <div key={idx} className={`card community ${getCardColorClass(card)}`} style={{ transform: 'none', width: '60px', height: '84px', fontSize: '1.5rem', boxShadow: '0 4px 10px rgba(0,0,0,0.5)' }}>{card}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div style={{ marginBottom: '30px' }}>
+                  {gameState.showdown_results.map((r, idx) => (
+                    <div key={idx} style={{ marginBottom: '15px', fontSize: '1.4rem' }}>
+                      赢家 <strong style={{ color: 'var(--accent)' }}>{r.name}</strong> 依靠 <span style={{color:'white', fontWeight:'bold'}}>{r.reason}</span> <br/>
+                      通吃 <span style={{ color: '#4caf50', fontWeight: 'bold' }}>💰 {r.won}</span> 筹码！
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {/* 弃牌获胜时的亮牌选项 */}
+            {(() => {
+              const isFoldWin = gameState.showdown_results.some(r => r.reason.includes('Fold'));
+              const amIWinner = me && gameState.showdown_results.some(r => r.name === me.name);
+              const myCardsShown = me && me.hole_cards && me.hole_cards.length > 0;
+              if (isFoldWin && amIWinner) {
+                return (
+                  <div style={{ marginBottom: '30px', padding: '20px', background: 'rgba(255,255,255,0.05)', borderRadius: '15px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                    {myCardsShown ? (
+                      <>
+                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginBottom: '15px' }}>
+                          {me.hole_cards.map((card, idx) => (
+                            <span key={idx} style={{ background: 'white', border: '1px solid #ccc', borderRadius: '8px', padding: '8px 15px', fontSize: '1.5rem', color: getCardColorClass(card) === 'red' ? '#e53935' : '#333', fontWeight: 'bold', boxShadow: '0 2px 5px rgba(0,0,0,0.5)' }}>{card}</span>
+                          ))}
+                        </div>
+                        <button onClick={() => handleAction("hide_cards")} style={{ padding: '8px 20px', background: 'rgba(255,255,255,0.15)', color: '#ccc', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem' }}>
+                          🙈 隐藏底牌
+                        </button>
+                      </>
+                    ) : (
+                      <button onClick={() => handleAction("show_cards")} style={{ padding: '10px 25px', background: 'linear-gradient(135deg, #e65c00, #F9D423)', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '1rem', fontWeight: 'bold', boxShadow: '0 3px 10px rgba(230,92,0,0.3)' }}>
+                        🃏 向对手展示底牌
+                      </button>
+                    )}
+                  </div>
+                );
+              }
+              return null;
+            })()}
+
+            {/* 正常showdown的底牌揭晓 */}
+            {gameState.players.filter(p => p.is_active && p.hole_cards && p.hole_cards.length > 0).length > 0 && (
+              <div style={{ marginBottom: '30px', padding: '20px', background: 'rgba(0,0,0,0.4)', borderRadius: '15px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                 <h4 style={{ color: 'var(--text-muted)', margin: '0 0 20px 0', fontSize: '1.1rem' }}>🃏 最终拼杀底牌揭晓 🃏</h4>
+                 <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                   {gameState.players.filter(p => p.is_active && p.hole_cards && p.hole_cards.length > 0).map(p => (
+                      <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 30px' }}>
+                         <span style={{ color: 'white', fontWeight: 'bold', fontSize: '1.3rem' }}>{p.name}</span>
+                         <div style={{ display: 'flex', gap: '10px' }}>
+                           {p.hole_cards.map((card, idx) => (
+                             <span key={idx} style={{ background: 'white', border: '1px solid #ccc', borderRadius: '8px', padding: '8px 15px', fontSize: '1.5rem', color: getCardColorClass(card) === 'red' ? '#e53935' : '#333', fontWeight: 'bold', boxShadow: '0 2px 5px rgba(0,0,0,0.5)' }}>{card}</span>
+                           ))}
+                         </div>
+                      </div>
+                   ))}
+                 </div>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '20px', justifyContent: 'center', marginTop: '10px' }}>
+              {me && me.chips > 0 && (
+                <button className="btn-start" style={{ padding: '15px 40px', fontSize: '1.2rem', letterSpacing: '2px', boxShadow: '0 5px 15px rgba(76, 175, 80, 0.4)' }} onClick={() => handleAction("start")}>
+                  <Play size={20} /> 新的一局
+                </button>
+              )}
+              <button onClick={onLeave} style={{ padding: '15px 40px', fontSize: '1.2rem', background: 'transparent', border: '1px solid gray', color: 'gray', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <LogOut size={20} /> 返回大厅
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       
-      {/* 终极大赢家 交互式弹窗 */}
+      {/* 终极大赢家弹窗 */}
       {hasWonGale && !victoryDismissed && me && me.chips > 0 && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(255,215,0,0.2)', backdropFilter: 'blur(5px)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
            <div style={{ background: 'linear-gradient(135deg, #2a2a2a, #111)', padding: '50px', borderRadius: '20px', border: '3px solid gold', textAlign: 'center', boxShadow: '0px 0px 50px rgba(255,215,0,0.4)', maxWidth: '500px' }}>
-             <h1 style={{ fontSize: '3.5rem', color: 'gold', textShadow: '0px 0px 15px gold', margin: '0 0 20px 0' }}>
-               👑 绝对征服 👑
-             </h1>
+             <h1 style={{ fontSize: '3.5rem', color: 'gold', textShadow: '0px 0px 15px gold', margin: '0 0 20px 0' }}>👑 绝对征服 👑</h1>
              <p style={{ fontSize: '1.2rem', color: 'white', lineHeight: '1.6', marginBottom: '30px' }}>
                全桌对手已悉数破产！您的统治已经确立，当前筹码堆积如山：<br/>
                <span style={{ fontSize: '2rem', color: '#4caf50', fontWeight: 'bold', display: 'block', margin: '15px 0' }}>💰 {me.chips}</span>
@@ -243,11 +486,12 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
         </div>
       )}
 
-      <header className="header">
+      <header className="header" style={{ position: 'relative', zIndex: 10000 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
            <button onClick={onLeave} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: 'var(--text-main)', padding: '10px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap:'5px' }}>
              <LogOut size={16} /> 退大厅
            </button>
+           <TutorialModal variant="rules" trigger="button" />
            <h1>💎 牌桌 #{tableId}</h1>
         </div>
         <div className="turn-indicator">
@@ -259,7 +503,7 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
         </div>
       </header>
 
-      <main className="game-board" style={{ paddingBottom: '100px' }}>
+      <main className="game-board">
         <div className="opponents">
           {gameState.players.map((p) => {
              if (p.id === clientId) return null;
@@ -290,65 +534,129 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
         <section className="community-area">
           <h3>总底池: <span className="pot-amount">💰{gameState.pot}</span></h3>
           <p style={{ margin:0, fontSize:'0.85rem', color:'var(--text-muted)'}}>最高下注: {gameState.current_highest_bet}</p>
-          <div className="cards-row">
-            {gameState.community_cards.length > 0 
-             ? gameState.community_cards.map((card, i) => <div key={i} className={`card community ${getCardColorClass(card)}`}>{card}</div>)
-             : <div className="card empty">等待发牌...</div>}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center' }}>
+            {showRunTwiceBoards ? (
+              gameState.run_twice_boards.map((board, rowIdx) => (
+                (rowIdx === 0 || gameState.phase === "SHOWDOWN" || board.length > runTwiceBaseCount) ? (
+                <div key={rowIdx} style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.75rem', color: rowIdx === 0 ? '#4caf50' : '#64b5f6', fontWeight: 'bold', letterSpacing: '1px' }}>
+                    {rowIdx === 0 ? '第 1 排公共牌' : '第 2 排公共牌'}
+                  </span>
+                  <div className="cards-row">
+                    {board.length > 0
+                      ? board.map((card, i) => renderAnimatedCommunityCard(card, `${rowIdx}-${i}`))
+                      : <div className="card empty">等待发牌...</div>}
+                  </div>
+                </div>
+                ) : null
+              ))
+            ) : (
+              <div className="cards-row">
+                {gameState.community_cards.length > 0 
+                 ? gameState.community_cards.map((card, i) => renderAnimatedCommunityCard(card, i))
+                 : <div className="card empty">等待发牌...</div>}
+              </div>
+            )}
           </div>
           <div className="phase-badge">当前阶段: {gameState.phase}</div>
         </section>
 
         {me && (
-          <section className="my-area">
-            <div className="my-info">
-              <h3>我的底牌 ({me.name}) {isSpectating && " - 👁️观战中"}</h3>
-              <p className="my-chips">筹码: 💰 {me.chips} | 本轮下注: 💰 {me.current_bet}</p>
-               <span style={{fontSize: '0.8rem', color:'var(--text-muted)'}}>❤️ 剩余买入: {3 - me.revives_used}</span>
-            </div>
-            <div className="my-hole-cards">
-               {me.hole_cards.length > 0 
-                ? me.hole_cards.map((card, idx) => <div key={idx} className={`card private ${getCardColorClass(card)}`}>{card}</div>)
-                : <div className="card private empty">暂无手牌</div>}
-            </div>
+          <section style={{ flexShrink: 0, background: 'rgba(0,0,0,0.75)', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', gap: '0' }}>
             
-            <div className="actions" style={{position: 'absolute', bottom: 0, left: 0, right: 0, padding: '20px 30px', background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(10px)', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'center', gap: '20px'}}>
-               {gameState.phase === "WAITING" ? (
-                 <button 
-                   className="btn-start" 
-                   style={{padding: '12px 40px', fontSize: '1.2rem', opacity: (gameState.players.filter(p => p.chips > 0).length < 2 || isSpectating || me.chips === 0) ? 0.5 : 1}} 
-                   onClick={() => handleAction("start")}
-                   disabled={gameState.players.filter(p => p.chips > 0).length < 2 || isSpectating || me.chips === 0}
-                 >
-                   <Play size={20} /> {gameState.players.filter(p => p.chips > 0).length < 2 ? "等待筹码充足的玩家..." : "新的一局"}
-                 </button>
-               ) : (
-                 <>
-                   <button style={{background: 'var(--danger)', color: 'white', opacity: disableControls ? 0.3 : 1, cursor: disableControls ? 'not-allowed' : 'pointer'}} disabled={disableControls} onClick={() => handleAction("fold")}>
-                     <XCircle size={18} /> 弃牌 
-                   </button>
-                   {canCheck ? (
-                     <button style={{background: '#4caf50', color: 'white', opacity: disableControls ? 0.3 : 1, cursor: disableControls ? 'not-allowed' : 'pointer'}} disabled={disableControls} onClick={() => handleAction("check")}>
-                       <Check size={18} /> 过牌 
-                     </button>
-                   ) : (
-                     <button style={{background: '#2196f3', color: 'white', opacity: disableControls ? 0.3 : 1, cursor: disableControls ? 'not-allowed' : 'pointer'}} disabled={disableControls} onClick={() => handleAction("call")}>
-                       <Coins size={18} /> 跟注 ({Math.min(gameState.current_highest_bet - me.current_bet, me.chips)})
-                     </button>
-                   )}
-                   
-                   <div style={{display: 'flex', gap: '10px', alignItems: 'center', background: 'rgba(255,255,255,0.1)', padding: '5px 15px', borderRadius: '10px', opacity: disableControls ? 0.3 : 1, pointerEvents: disableControls ? 'none' : 'auto'}}>
-                     <input type="range" min={gameState.current_highest_bet + gameState.min_raise} max={me.chips + me.current_bet} value={Math.min(raiseAmount, me.chips + me.current_bet)} onChange={(e) => setRaiseAmount(Number(e.target.value))} style={{cursor:'pointer'}} />
-                     <span style={{minWidth: '50px'}}>{raiseAmount}</span>
-                     <button className="btn-bet" onClick={() => handleAction("raise", raiseAmount - me.current_bet)} disabled={raiseAmount > (me.chips + me.current_bet)}>
-                       <ArrowUpCircle size={18} /> 加注到 {raiseAmount}
-                     </button>
-                   </div>
-                   <button style={{background: 'purple', color: 'white', opacity: disableControls ? 0.3 : 1, cursor: disableControls ? 'not-allowed' : 'pointer'}} disabled={disableControls} onClick={() => handleAction("all-in")}>
-                     ALL-IN
-                   </button>
-                 </>
-               )}
+            {/* Row 1: 底牌 */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', padding: '0.8vh 2vw', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+              <span style={{ color: 'var(--primary)', fontWeight: 600, fontSize: 'clamp(0.75rem, 1.3vw, 1rem)' }}>
+                {me.name} 的底牌{isSpectating && ' 👁️观战中'}:
+              </span>
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                {me.hole_cards.length > 0 ? (
+                  cardsRevealed ? (
+                    me.hole_cards.map((card, idx) => (
+                      <div key={idx} className={`card private ${getCardColorClass(card)}`} style={{ width: 'clamp(35px, 5vw, 55px)', height: 'clamp(50px, 7vw, 78px)', fontSize: 'clamp(1rem, 2vw, 1.6rem)', transition: 'all 0.3s' }}>{card}</div>
+                    ))
+                  ) : (
+                    me.hole_cards.map((_, idx) => (
+                      renderCoveredHoleCard(idx)
+                    ))
+                  )
+                ) : (
+                  <span style={{ color: 'var(--text-muted)', fontSize: 'clamp(0.7rem, 1.2vw, 0.9rem)' }}>暂无手牌</span>
+                )}
+              </div>
+              {me.hole_cards.length > 0 && (
+                <button 
+                  onClick={() => {
+                    if (cardsRevealed) return;
+                    setCardsRevealed(true);
+                    if (peekTimerRef.current) clearTimeout(peekTimerRef.current);
+                    peekTimerRef.current = setTimeout(() => setCardsRevealed(false), 3000);
+                  }}
+                  style={{ padding: '4px 12px', background: cardsRevealed ? 'rgba(3,218,198,0.3)' : 'rgba(255,255,255,0.15)', color: cardsRevealed ? 'var(--accent)' : '#ccc', border: `1px solid ${cardsRevealed ? 'var(--accent)' : 'rgba(255,255,255,0.2)'}`, borderRadius: '8px', cursor: cardsRevealed ? 'default' : 'pointer', fontSize: 'clamp(0.7rem, 1.1vw, 0.85rem)', whiteSpace: 'nowrap', transition: 'all 0.3s' }}
+                >
+                  {cardsRevealed ? '👁️ 展示中...' : '👀 看牌'}
+                </button>
+              )}
             </div>
+
+            {/* Row 2: 筹码 + 剩余买入 */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '20px', padding: '0.5vh 2vw', borderBottom: '1px solid rgba(255,255,255,0.06)', fontSize: 'clamp(0.7rem, 1.2vw, 0.9rem)' }}>
+              <span style={{ color: 'var(--text-muted)' }}>筹码: <strong style={{ color: '#ffd700' }}>💰 {me.chips}</strong></span>
+              <span style={{ color: 'var(--text-muted)' }}>本轮下注: <strong style={{ color: 'white' }}>💰 {me.current_bet}</strong></span>
+              <span style={{ color: 'var(--text-muted)' }}>❤️ 剩余买入: <strong style={{ color: 'var(--accent)' }}>{3 - me.revives_used}</strong></span>
+            </div>
+
+            {gameState.phase === "WAITING" ? (
+              /* WAITING: 开局按钮 */
+              <div style={{ display: 'flex', justifyContent: 'center', padding: '1vh 2vw' }}>
+                <button 
+                  className="btn-start" 
+                  style={{ padding: '0.8vh 3vw', fontSize: 'clamp(0.85rem, 1.5vw, 1.1rem)', opacity: (gameState.players.filter(p => p.chips > 0).length < 2 || isSpectating || me.chips === 0) ? 0.5 : 1 }} 
+                  onClick={() => handleAction("start")}
+                  disabled={gameState.players.filter(p => p.chips > 0).length < 2 || isSpectating || me.chips === 0}
+                >
+                  <Play size={16} /> {gameState.players.filter(p => p.chips > 0).length < 2 ? "等待筹码充足的玩家..." : "🎲 新的一局"}
+                </button>
+              </div>
+            ) : (
+              <>
+                {/* Row 3: 弃牌 + 过牌/跟注 */}
+                <div style={{ display: 'flex', justifyContent: 'center', gap: '10px', padding: '0.6vh 2vw', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                  <button style={{ flex: 1, maxWidth: '200px', background: 'var(--danger)', color: 'white', opacity: disableControls ? 0.3 : 1, cursor: disableControls ? 'not-allowed' : 'pointer', justifyContent: 'center' }} disabled={disableControls} onClick={() => handleAction("fold")}>
+                    <XCircle size={16} /> 弃牌
+                  </button>
+                  {canCheck ? (
+                    <button style={{ flex: 1, maxWidth: '200px', background: '#4caf50', color: 'white', opacity: disableControls ? 0.3 : 1, cursor: disableControls ? 'not-allowed' : 'pointer', justifyContent: 'center' }} disabled={disableControls} onClick={() => handleAction("check")}>
+                      <Check size={16} /> 过牌
+                    </button>
+                  ) : (
+                    <button style={{ flex: 1, maxWidth: '200px', background: '#2196f3', color: 'white', opacity: disableControls ? 0.3 : 1, cursor: disableControls ? 'not-allowed' : 'pointer', justifyContent: 'center' }} disabled={disableControls} onClick={() => handleAction("call")}>
+                      <Coins size={16} /> 跟注 ({Math.min(gameState.current_highest_bet - me.current_bet, me.chips)})
+                    </button>
+                  )}
+                </div>
+
+                {/* Row 4: 预设加注 + 自定义输入 + 加注按钮 + ALL-IN */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.6vh 2vw', flexWrap: 'wrap', opacity: disableControls ? 0.3 : 1, pointerEvents: disableControls ? 'none' : 'auto' }}>
+                  <button onClick={() => setRaiseAmount(minRaiseTotal)} style={presetBtnStyle}>最小</button>
+                  <button onClick={() => setRaiseAmount(Math.min(gameState.current_highest_bet * 2, maxRaiseTotal))} style={presetBtnStyle}>2x</button>
+                  <button onClick={() => setRaiseAmount(Math.min(gameState.current_highest_bet * 3, maxRaiseTotal))} style={presetBtnStyle}>3x</button>
+                  <button onClick={() => setRaiseAmount(Math.min(Math.floor(gameState.pot / 2) + gameState.current_highest_bet, maxRaiseTotal))} style={presetBtnStyle}>½底池</button>
+                  <button onClick={() => setRaiseAmount(Math.min(gameState.pot + gameState.current_highest_bet, maxRaiseTotal))} style={presetBtnStyle}>满底池</button>
+                  <input 
+                    type="number" min={minRaiseTotal} max={maxRaiseTotal} value={raiseAmount} 
+                    onChange={(e) => { const v = Number(e.target.value); if (!isNaN(v)) setRaiseAmount(v); }} 
+                    style={{ width: '70px', padding: '4px 6px', background: 'rgba(0,0,0,0.5)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '6px', fontSize: 'clamp(0.7rem, 1.1vw, 0.9rem)', textAlign: 'center', outline: 'none' }} 
+                  />
+                  <button className="btn-bet" onClick={() => handleAction("raise", raiseAmount - me.current_bet)} disabled={raiseAmount > maxRaiseTotal || raiseAmount < minRaiseTotal} style={{ fontSize: 'clamp(0.7rem, 1.1vw, 0.9rem)' }}>
+                    <ArrowUpCircle size={14} /> 加注到 {raiseAmount}
+                  </button>
+                  <button style={{ background: 'linear-gradient(135deg, #7b1fa2, #4a148c)', color: 'white', opacity: disableControls ? 0.3 : 1, cursor: disableControls ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: 'clamp(0.7rem, 1.1vw, 0.9rem)' }} disabled={disableControls} onClick={() => handleAction("all-in")}>
+                    🔥 ALL-IN
+                  </button>
+                </div>
+              </>
+            )}
           </section>
         )}
       </main>
