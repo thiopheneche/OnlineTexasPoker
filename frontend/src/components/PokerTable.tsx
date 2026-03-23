@@ -117,6 +117,9 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
   };
 
   const getCardColorClass = (card: string) => (card.includes('♥') || card.includes('♦')) ? 'red' : '';
+  const renderAnimatedCommunityCard = (card: string, key: string | number) => (
+    <div key={key} className={`card community dealing ${getCardColorClass(card)}`}>{card}</div>
+  );
 
   const me = gameState?.players.find(p => p.id === clientId);
   const currentTurnPlayer = gameState?.players[gameState.current_turn_index] || null;
@@ -169,6 +172,7 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
   const minRaiseTotal = gameState.current_highest_bet + gameState.min_raise;
   const maxRaiseTotal = me ? me.chips + me.current_bet : 0;
   const showRunTwiceBoards = gameState.run_it_twice === 2 && gameState.run_twice_boards.length === 2 && gameState.run_twice_boards.some(board => board.length > 0);
+  const runTwiceBaseCount = gameState.community_cards.length;
 
   const presetBtnStyle: React.CSSProperties = {
     padding: '3px 8px', fontSize: '0.75rem', background: 'rgba(255,255,255,0.15)',
@@ -518,21 +522,23 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center' }}>
             {showRunTwiceBoards ? (
               gameState.run_twice_boards.map((board, rowIdx) => (
+                (rowIdx === 0 || gameState.phase === "SHOWDOWN" || board.length > runTwiceBaseCount) ? (
                 <div key={rowIdx} style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'center' }}>
                   <span style={{ fontSize: '0.75rem', color: rowIdx === 0 ? '#4caf50' : '#64b5f6', fontWeight: 'bold', letterSpacing: '1px' }}>
                     {rowIdx === 0 ? '第 1 排公共牌' : '第 2 排公共牌'}
                   </span>
                   <div className="cards-row">
                     {board.length > 0
-                      ? board.map((card, i) => <div key={`${rowIdx}-${i}`} className={`card community ${getCardColorClass(card)}`}>{card}</div>)
+                      ? board.map((card, i) => renderAnimatedCommunityCard(card, `${rowIdx}-${i}`))
                       : <div className="card empty">等待发牌...</div>}
                   </div>
                 </div>
+                ) : null
               ))
             ) : (
               <div className="cards-row">
                 {gameState.community_cards.length > 0 
-                 ? gameState.community_cards.map((card, i) => <div key={i} className={`card community ${getCardColorClass(card)}`}>{card}</div>)
+                 ? gameState.community_cards.map((card, i) => renderAnimatedCommunityCard(card, i))
                  : <div className="card empty">等待发牌...</div>}
               </div>
             )}

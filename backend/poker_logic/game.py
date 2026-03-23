@@ -35,6 +35,18 @@ class PokerEngine:
         return list(base_cards), list(base_cards)
 
     @staticmethod
+    async def _broadcast_animation_step(broadcast_cb):
+        if broadcast_cb:
+            await broadcast_cb()
+        await asyncio.sleep(2)
+
+    @staticmethod
+    async def _deal_cards_one_by_one(target_cards: list, cards_to_deal: list, broadcast_cb):
+        for card in cards_to_deal:
+            target_cards.append(card)
+            await PokerEngine._broadcast_animation_step(broadcast_cb)
+
+    @staticmethod
     async def process_action(state: GameState, deck: Deck, player_id: str, action: str, amount: int = 0, broadcast_cb=None):
         if action == "revive":
             for p in state.players:
@@ -354,26 +366,35 @@ class PokerEngine:
         state.current_highest_bet = 0
         state.min_raise = state.big_blind
         state.current_turn_index = -1
+        state.run_twice_boards = []
         
         while state.phase != GamePhase.SHOWDOWN:
             if state.phase == GamePhase.PREFLOP:
-                state.community_cards.extend([str(c) for c in deck.deal(3)])
                 state.phase = GamePhase.FLOP
+                await PokerEngine._deal_cards_one_by_one(
+                    state.community_cards,
+                    [str(c) for c in deck.deal(3)],
+                    broadcast_cb
+                )
             elif state.phase == GamePhase.FLOP:
-                state.community_cards.append(str(deck.deal(1)[0]))
                 state.phase = GamePhase.TURN
+                await PokerEngine._deal_cards_one_by_one(
+                    state.community_cards,
+                    [str(deck.deal(1)[0])],
+                    broadcast_cb
+                )
             elif state.phase == GamePhase.TURN:
-                state.community_cards.append(str(deck.deal(1)[0]))
                 state.phase = GamePhase.RIVER
+                await PokerEngine._deal_cards_one_by_one(
+                    state.community_cards,
+                    [str(deck.deal(1)[0])],
+                    broadcast_cb
+                )
             elif state.phase == GamePhase.RIVER:
                 PokerEngine._execute_showdown(state)
                 break
             else:
                 break
-                
-            if broadcast_cb:
-                await broadcast_cb()
-            await asyncio.sleep(3)
 
     @staticmethod
     async def _fast_forward_to_showdown_twice(state: GameState, deck: Deck, broadcast_cb):
@@ -392,12 +413,20 @@ class PokerEngine:
             return
 
         board1, board2 = PokerEngine._build_run_twice_boards(state, deck)
-        state.run_twice_boards = [board1, board2]
+        base_cards = list(state.community_cards)
+        state.run_twice_boards = [list(base_cards), list(base_cards)]
         state.phase = GamePhase.RIVER
 
-        if broadcast_cb:
-            await broadcast_cb()
-        await asyncio.sleep(2)
+        await PokerEngine._deal_cards_one_by_one(
+            state.run_twice_boards[0],
+            board1[len(base_cards):],
+            broadcast_cb
+        )
+        await PokerEngine._deal_cards_one_by_one(
+            state.run_twice_boards[1],
+            board2[len(base_cards):],
+            broadcast_cb
+        )
 
         PokerEngine._execute_showdown_twice(state, board1, board2)
 
