@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { PokerTable } from './components/PokerTable';
 import { Lobby } from './components/Lobby';
+import { DisclaimerModal } from './components/Disclaimer';
 
 function App() {
   const [currentTableId, setCurrentTableId] = useState<string | null>(null);
@@ -81,7 +82,10 @@ function App() {
                进入大厅 (Enter)
              </button>
           </form>
-          <p style={{ fontSize: '0.8rem', color: 'gray', marginTop: '20px', lineHeight: '1.5' }}>
+          <div style={{ marginTop: '20px' }}>
+            <DisclaimerModal trigger="link" />
+          </div>
+          <p style={{ fontSize: '0.8rem', color: 'gray', marginTop: '15px', lineHeight: '1.5' }}>
             注：您的 ID 采取"用完即焚"机制。全站仅在您保持浏览期间独占此名称，关闭或刷新网页将自动断线将其释放！
           </p>
         </div>
