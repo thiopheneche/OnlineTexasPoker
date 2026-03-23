@@ -168,6 +168,7 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
   const showSettlement = gameState.phase === "SHOWDOWN" && gameState.showdown_results && gameState.showdown_results.length > 0;
   const minRaiseTotal = gameState.current_highest_bet + gameState.min_raise;
   const maxRaiseTotal = me ? me.chips + me.current_bet : 0;
+  const showRunTwiceBoards = gameState.run_it_twice === 2 && gameState.run_twice_boards.length === 2 && gameState.run_twice_boards.some(board => board.length > 0);
 
   const presetBtnStyle: React.CSSProperties = {
     padding: '3px 8px', fontSize: '0.75rem', background: 'rgba(255,255,255,0.15)',
@@ -514,10 +515,27 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
         <section className="community-area">
           <h3>总底池: <span className="pot-amount">💰{gameState.pot}</span></h3>
           <p style={{ margin:0, fontSize:'0.85rem', color:'var(--text-muted)'}}>最高下注: {gameState.current_highest_bet}</p>
-          <div className="cards-row">
-            {gameState.community_cards.length > 0 
-             ? gameState.community_cards.map((card, i) => <div key={i} className={`card community ${getCardColorClass(card)}`}>{card}</div>)
-             : <div className="card empty">等待发牌...</div>}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center' }}>
+            {showRunTwiceBoards ? (
+              gameState.run_twice_boards.map((board, rowIdx) => (
+                <div key={rowIdx} style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.75rem', color: rowIdx === 0 ? '#4caf50' : '#64b5f6', fontWeight: 'bold', letterSpacing: '1px' }}>
+                    {rowIdx === 0 ? '第 1 排公共牌' : '第 2 排公共牌'}
+                  </span>
+                  <div className="cards-row">
+                    {board.length > 0
+                      ? board.map((card, i) => <div key={`${rowIdx}-${i}`} className={`card community ${getCardColorClass(card)}`}>{card}</div>)
+                      : <div className="card empty">等待发牌...</div>}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="cards-row">
+                {gameState.community_cards.length > 0 
+                 ? gameState.community_cards.map((card, i) => <div key={i} className={`card community ${getCardColorClass(card)}`}>{card}</div>)
+                 : <div className="card empty">等待发牌...</div>}
+              </div>
+            )}
           </div>
           <div className="phase-badge">当前阶段: {gameState.phase}</div>
         </section>

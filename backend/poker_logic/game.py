@@ -4,6 +4,37 @@ import asyncio
 
 class PokerEngine:
     @staticmethod
+    def _remaining_board_cards(state: GameState):
+        if state.phase == GamePhase.PREFLOP:
+            return 5
+        if state.phase == GamePhase.FLOP:
+            return 2
+        if state.phase == GamePhase.TURN:
+            return 1
+        return 0
+
+    @staticmethod
+    def _build_run_twice_boards(state: GameState, deck: Deck):
+        if state.phase == GamePhase.PREFLOP:
+            return [str(c) for c in deck.deal(5)], [str(c) for c in deck.deal(5)]
+
+        base_cards = list(state.community_cards)
+
+        if state.phase == GamePhase.FLOP:
+            return (
+                base_cards + [str(c) for c in deck.deal(2)],
+                base_cards + [str(c) for c in deck.deal(2)]
+            )
+
+        if state.phase == GamePhase.TURN:
+            return (
+                base_cards + [str(deck.deal(1)[0])],
+                base_cards + [str(deck.deal(1)[0])]
+            )
+
+        return list(base_cards), list(base_cards)
+
+    @staticmethod
     async def process_action(state: GameState, deck: Deck, player_id: str, action: str, amount: int = 0, broadcast_cb=None):
         if action == "revive":
             for p in state.players:
@@ -292,7 +323,11 @@ class PokerEngine:
             players_with_chips = [p for p in active_players if p.chips > 0]
             if len(players_with_chips) <= 1:
                 # All-in situation: check if we need run-it-twice decision
-                if state.first_allin_player_id and len(active_players) >= 2:
+                if (
+                    state.first_allin_player_id
+                    and len(active_players) >= 2
+                    and PokerEngine._remaining_board_cards(state) > 0
+                ):
                     # Set awaiting state and broadcast — let the first all-in player decide
                     state.awaiting_run_twice = True
                     # Reset betting state for display
@@ -351,45 +386,19 @@ class PokerEngine:
         state.min_raise = state.big_blind
         state.current_turn_index = -1
         
-        # Determine how many cards still need to be dealt
-        current_count = len(state.community_cards)
-        # cards_needed: PREFLOP->5, FLOP->2, TURN->1, RIVER->0
-        if state.phase == GamePhase.PREFLOP:
-            cards_needed = 5
-        elif state.phase == GamePhase.FLOP:
-            cards_needed = 2
-        elif state.phase == GamePhase.TURN:
-            cards_needed = 1
-        else:
-            # RIVER or already showdown — just do normal showdown
+        # Only prompt/run twice when there are still community cards left to deal
+        if PokerEngine._remaining_board_cards(state) == 0:
             PokerEngine._execute_showdown(state)
             return
-        
-        saved_community = list(state.community_cards)
-        
-        # Deal for the initial community cards if still in PREFLOP
-        base_cards = list(saved_community)
-        if state.phase == GamePhase.PREFLOP:
-            flop = [str(c) for c in deck.deal(3)]
-            base_cards.extend(flop)
-            cards_needed = 2  # still need turn + river after flop
-        
-        # Deal run 1 remaining cards
-        run1_extra = [str(c) for c in deck.deal(cards_needed)]
-        board1 = base_cards + run1_extra
-        
-        # Deal run 2 remaining cards (next cards from same deck)
-        run2_extra = [str(c) for c in deck.deal(cards_needed)]
-        board2 = base_cards + run2_extra
-        
-        # Show dealing animation: display board1 being dealt
-        state.community_cards = list(board1)
-        state.phase = GamePhase.RIVER  # visually at river
+
+        board1, board2 = PokerEngine._build_run_twice_boards(state, deck)
+        state.run_twice_boards = [board1, board2]
+        state.phase = GamePhase.RIVER
+
         if broadcast_cb:
             await broadcast_cb()
         await asyncio.sleep(2)
-        
-        # Now execute dual-board showdown
+
         PokerEngine._execute_showdown_twice(state, board1, board2)
 
     @staticmethod
