@@ -25,10 +25,29 @@ class PokerEngine:
                     if p.id == player_id and hasattr(p, '_saved_hole_cards') and p._saved_hole_cards:
                         p.hole_cards = []
             return
+
+        # Run-it-twice decision actions
+        if action == "run_once":
+            if state.awaiting_run_twice and state.first_allin_player_id == player_id:
+                state.awaiting_run_twice = False
+                state.run_it_twice = 1
+                await PokerEngine._fast_forward_to_showdown(state, deck, broadcast_cb)
+            return
+
+        if action == "run_twice":
+            if state.awaiting_run_twice and state.first_allin_player_id == player_id:
+                state.awaiting_run_twice = False
+                state.run_it_twice = 2
+                await PokerEngine._fast_forward_to_showdown_twice(state, deck, broadcast_cb)
+            return
             
         if state.phase in (GamePhase.WAITING, GamePhase.SHOWDOWN):
             if action == "start":
                 PokerEngine._start_new_hand(state, deck)
+            return
+
+        # Block actions while awaiting run-twice decision
+        if state.awaiting_run_twice:
             return
 
         if state.current_turn_index >= len(state.players) or state.current_turn_index < 0:
@@ -84,6 +103,10 @@ class PokerEngine:
                 current_p.total_investment += raise_amount
                 state.pot += raise_amount
                 current_p.has_acted = True
+
+                # Track first all-in player
+                if current_p.chips == 0 and not state.first_allin_player_id:
+                    state.first_allin_player_id = current_p.id
             
         else:
             return
@@ -102,6 +125,11 @@ class PokerEngine:
         state.pot = 0
         state.current_highest_bet = state.big_blind 
         state.min_raise = state.big_blind
+        # Reset run-it-twice state
+        state.first_allin_player_id = ""
+        state.awaiting_run_twice = False
+        state.run_it_twice = 0
+        state.run_twice_boards = []
         
         for p in state.players:
             p.current_bet = 0
@@ -140,8 +168,31 @@ class PokerEngine:
         PokerEngine._find_next_active_player(state)
 
     @staticmethod
-    def _execute_showdown(state: GameState):
+    def _evaluate_board(state: GameState, community_cards: list):
+        """Evaluate hands against a specific community board. Returns (winners, hand_names)."""
         from .evaluator import evaluate_hand
+        
+        participants = [p for p in state.players if p.is_active and len(p.hole_cards) > 0]
+        
+        best_score = -1
+        best_tie_breaker = ()
+        winners = []
+        hand_names = {}
+        
+        for p in participants:
+            score, tie_breaker, hand_name = evaluate_hand(p.hole_cards + community_cards)
+            hand_names[p.id] = hand_name
+            if score > best_score or (score == best_score and tie_breaker > best_tie_breaker):
+                best_score = score
+                best_tie_breaker = tie_breaker
+                winners = [p]
+            elif score == best_score and tie_breaker == best_tie_breaker:
+                winners.append(p)
+        
+        return winners, hand_names
+
+    @staticmethod
+    def _execute_showdown(state: GameState):
         state.phase = GamePhase.SHOWDOWN
         
         participants_not_folded = [p for p in state.players if p.is_active and len(p.hole_cards) > 0]
@@ -153,21 +204,8 @@ class PokerEngine:
             winner._saved_hole_cards = list(winner.hole_cards)
             winner.hole_cards = []
             return
-            
-        best_score = -1
-        best_tie_breaker = ()
-        winners = []
-        hand_names = {}
         
-        for p in participants_not_folded:
-            score, tie_breaker, hand_name = evaluate_hand(p.hole_cards + state.community_cards)
-            hand_names[p.id] = hand_name
-            if score > best_score or (score == best_score and tie_breaker > best_tie_breaker):
-                best_score = score
-                best_tie_breaker = tie_breaker
-                winners = [p]
-            elif score == best_score and tie_breaker == best_tie_breaker:
-                winners.append(p)
+        winners, hand_names = PokerEngine._evaluate_board(state, state.community_cards)
                 
         if len(winners) > 0:
             win_amount = state.pot // len(winners)
@@ -181,6 +219,49 @@ class PokerEngine:
                 })
         else:
             state.showdown_results = []
+
+    @staticmethod
+    def _execute_showdown_twice(state: GameState, board1: list, board2: list):
+        """Execute showdown with two boards, splitting the pot 50/50."""
+        state.phase = GamePhase.SHOWDOWN
+        state.run_twice_boards = [board1, board2]
+        
+        half_pot = state.pot // 2
+        other_half = state.pot - half_pot  # handle odd pot
+        
+        # Evaluate board 1
+        winners1, hand_names1 = PokerEngine._evaluate_board(state, board1)
+        # Evaluate board 2
+        winners2, hand_names2 = PokerEngine._evaluate_board(state, board2)
+        
+        state.showdown_results = []
+        
+        # Distribute first half
+        if len(winners1) > 0:
+            share = half_pot // len(winners1)
+            for w in winners1:
+                w.chips += share
+                state.showdown_results.append({
+                    "name": w.name,
+                    "won": share,
+                    "reason": hand_names1.get(w.id, ""),
+                    "run": 1
+                })
+        
+        # Distribute second half
+        if len(winners2) > 0:
+            share = other_half // len(winners2)
+            for w in winners2:
+                w.chips += share
+                state.showdown_results.append({
+                    "name": w.name,
+                    "won": share,
+                    "reason": hand_names2.get(w.id, ""),
+                    "run": 2
+                })
+
+        # Set community_cards to board1 for display (frontend will show both from run_twice_boards)
+        state.community_cards = board1
 
     @staticmethod
     async def _advance_turn_or_phase(state: GameState, deck: Deck, broadcast_cb):
@@ -210,7 +291,20 @@ class PokerEngine:
             
             players_with_chips = [p for p in active_players if p.chips > 0]
             if len(players_with_chips) <= 1:
-                await PokerEngine._fast_forward_to_showdown(state, deck, broadcast_cb)
+                # All-in situation: check if we need run-it-twice decision
+                if state.first_allin_player_id and len(active_players) >= 2:
+                    # Set awaiting state and broadcast — let the first all-in player decide
+                    state.awaiting_run_twice = True
+                    # Reset betting state for display
+                    for p in state.players:
+                        p.current_bet = 0
+                        p.has_acted = True
+                    state.current_highest_bet = 0
+                    state.current_turn_index = -1
+                    # Do NOT fast-forward yet; wait for run_once/run_twice action
+                    return
+                else:
+                    await PokerEngine._fast_forward_to_showdown(state, deck, broadcast_cb)
             else:
                 PokerEngine._next_phase(state, deck)
         else:
@@ -244,8 +338,59 @@ class PokerEngine:
                 
             if broadcast_cb:
                 await broadcast_cb()
-            # 缩短等待间隙，由 5s 变为 3s
             await asyncio.sleep(3)
+
+    @staticmethod
+    async def _fast_forward_to_showdown_twice(state: GameState, deck: Deck, broadcast_cb):
+        """Deal remaining community cards twice (two separate boards) and evaluate both."""
+        for p in state.players:
+            p.current_bet = 0
+            p.has_acted = True
+            
+        state.current_highest_bet = 0
+        state.min_raise = state.big_blind
+        state.current_turn_index = -1
+        
+        # Determine how many cards still need to be dealt
+        current_count = len(state.community_cards)
+        # cards_needed: PREFLOP->5, FLOP->2, TURN->1, RIVER->0
+        if state.phase == GamePhase.PREFLOP:
+            cards_needed = 5
+        elif state.phase == GamePhase.FLOP:
+            cards_needed = 2
+        elif state.phase == GamePhase.TURN:
+            cards_needed = 1
+        else:
+            # RIVER or already showdown — just do normal showdown
+            PokerEngine._execute_showdown(state)
+            return
+        
+        saved_community = list(state.community_cards)
+        
+        # Deal for the initial community cards if still in PREFLOP
+        base_cards = list(saved_community)
+        if state.phase == GamePhase.PREFLOP:
+            flop = [str(c) for c in deck.deal(3)]
+            base_cards.extend(flop)
+            cards_needed = 2  # still need turn + river after flop
+        
+        # Deal run 1 remaining cards
+        run1_extra = [str(c) for c in deck.deal(cards_needed)]
+        board1 = base_cards + run1_extra
+        
+        # Deal run 2 remaining cards (next cards from same deck)
+        run2_extra = [str(c) for c in deck.deal(cards_needed)]
+        board2 = base_cards + run2_extra
+        
+        # Show dealing animation: display board1 being dealt
+        state.community_cards = list(board1)
+        state.phase = GamePhase.RIVER  # visually at river
+        if broadcast_cb:
+            await broadcast_cb()
+        await asyncio.sleep(2)
+        
+        # Now execute dual-board showdown
+        PokerEngine._execute_showdown_twice(state, board1, board2)
 
     @staticmethod
     def _next_phase(state: GameState, deck: Deck):

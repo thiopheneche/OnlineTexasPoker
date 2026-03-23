@@ -17,6 +17,7 @@ export type ShowdownResult = {
   name: string;
   won: number;
   reason: string;
+  run?: number;
 };
 
 export type GameState = {
@@ -30,6 +31,10 @@ export type GameState = {
   players: Player[];
   button_index: number;
   current_turn_index: number;
+  first_allin_player_id: string;
+  awaiting_run_twice: boolean;
+  run_it_twice: number;
+  run_twice_boards: string[][];
 };
 
 type ChatMessage = {
@@ -297,29 +302,86 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
         </div>
       )}
 
+      {/* 发两次决定弹窗 */}
+      {gameState && gameState.awaiting_run_twice && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: 'linear-gradient(135deg, #1a1a2e, #16213e)', padding: '40px', borderRadius: '20px', border: '2px solid var(--accent)', textAlign: 'center', minWidth: '400px', maxWidth: '550px', boxShadow: '0 10px 40px rgba(3,218,198,0.3)' }}>
+            <h1 style={{ color: 'var(--accent)', margin: '0 0 15px 0', fontSize: '2rem' }}>🃏 发牌次数选择 🃏</h1>
+            <p style={{ color: 'var(--text-muted)', marginBottom: '10px', fontSize: '0.95rem' }}>当前底池: <strong style={{ color: '#ffd700' }}>💰 {gameState.pot}</strong></p>
+            {gameState.first_allin_player_id === clientId ? (
+              <>
+                <p style={{ color: '#ddd', marginBottom: '25px', lineHeight: '1.6', fontSize: '0.95rem' }}>
+                  您是第一个 All-In 的玩家，请选择剩余公共牌的发牌次数：
+                </p>
+                <div style={{ display: 'flex', gap: '15px', justifyContent: 'center' }}>
+                  <button onClick={() => handleAction("run_once")} style={{ padding: '15px 30px', background: 'linear-gradient(135deg, #4caf50, #2e7d32)', color: 'white', border: 'none', borderRadius: '12px', fontSize: '1.1rem', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 15px rgba(76,175,80,0.4)', flex: 1 }}>
+                    🎲 发一次
+                    <div style={{ fontSize: '0.75rem', fontWeight: 'normal', marginTop: '5px', opacity: 0.8 }}>正常结算</div>
+                  </button>
+                  <button onClick={() => handleAction("run_twice")} style={{ padding: '15px 30px', background: 'linear-gradient(135deg, #e65c00, #F9D423)', color: 'white', border: 'none', borderRadius: '12px', fontSize: '1.1rem', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 15px rgba(230,92,0,0.4)', flex: 1 }}>
+                    🎲🎲 发两次
+                    <div style={{ fontSize: '0.75rem', fontWeight: 'normal', marginTop: '5px', opacity: 0.8 }}>底池对半结算</div>
+                  </button>
+                </div>
+              </>
+            ) : (
+              <p style={{ color: '#ddd', fontSize: '1.1rem', animation: 'pulse 1.5s infinite' }}>
+                ✉️ 等待 <strong style={{ color: 'var(--accent)' }}>{gameState.players.find(p => p.id === gameState.first_allin_player_id)?.name || 'All-In玩家'}</strong> 选择发牌次数...
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* 结算弹窗 */}
       {showSettlement && (!isBankrupt || isSpectating) && !hasWonGale && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ background: '#111', padding: '40px', borderRadius: '20px', border: '2px solid gold', textAlign: 'center', minWidth: '500px', boxShadow: '0 10px 40px rgba(255, 215, 0, 0.2)', maxHeight: '90vh', overflowY: 'auto' }}>
             <h1 style={{ color: 'gold', margin: '0 0 30px 0', fontSize: '2.5rem', textShadow: '0 2px 10px rgba(255, 215, 0, 0.3)' }}>🏆 巅峰决战 🏆</h1>
-            {gameState.community_cards.length > 0 && (
-              <div style={{ marginBottom: '30px', padding: '20px', background: 'rgba(255,255,255,0.05)', borderRadius: '15px' }}>
-                <h4 style={{ color: 'var(--text-muted)', margin: '0 0 15px 0', fontSize: '1.1rem' }}>🌍 公共牌面 🌍</h4>
-                <div style={{ display: 'flex', gap: '15px', justifyContent: 'center' }}>
-                  {gameState.community_cards.map((card, idx) => (
-                    <div key={idx} className={`card community ${getCardColorClass(card)}`} style={{ transform: 'none', width: '60px', height: '84px', fontSize: '1.5rem', boxShadow: '0 4px 10px rgba(0,0,0,0.5)' }}>{card}</div>
+
+            {/* 发两次的双板展示 */}
+            {gameState.run_it_twice === 2 && gameState.run_twice_boards && gameState.run_twice_boards.length === 2 ? (
+              <>
+                {[0, 1].map(runIdx => (
+                  <div key={runIdx} style={{ marginBottom: '20px', padding: '15px', background: runIdx === 0 ? 'rgba(76,175,80,0.1)' : 'rgba(33,150,243,0.1)', borderRadius: '15px', border: `1px solid ${runIdx === 0 ? 'rgba(76,175,80,0.3)' : 'rgba(33,150,243,0.3)'}` }}>
+                    <h4 style={{ color: runIdx === 0 ? '#4caf50' : '#2196f3', margin: '0 0 10px 0', fontSize: '1rem' }}>
+                      {runIdx === 0 ? '🃏 第一次发牌' : '🃏 第二次发牌'} · 底池 {runIdx === 0 ? Math.floor(gameState.pot / 2) : gameState.pot - Math.floor(gameState.pot / 2)}
+                    </h4>
+                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginBottom: '10px' }}>
+                      {gameState.run_twice_boards[runIdx].map((card, cidx) => (
+                        <div key={cidx} className={`card community ${getCardColorClass(card)}`} style={{ transform: 'none', width: '50px', height: '70px', fontSize: '1.2rem', boxShadow: '0 2px 8px rgba(0,0,0,0.5)' }}>{card}</div>
+                      ))}
+                    </div>
+                    {gameState.showdown_results.filter(r => r.run === runIdx + 1).map((r, idx) => (
+                      <div key={idx} style={{ fontSize: '1.1rem', marginTop: '5px' }}>
+                        赢家 <strong style={{ color: 'var(--accent)' }}>{r.name}</strong> 依靠 <span style={{ color: 'white', fontWeight: 'bold' }}>{r.reason}</span> → <span style={{ color: '#4caf50', fontWeight: 'bold' }}>💰 {r.won}</span>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </>
+            ) : (
+              <>
+                {gameState.community_cards.length > 0 && (
+                  <div style={{ marginBottom: '30px', padding: '20px', background: 'rgba(255,255,255,0.05)', borderRadius: '15px' }}>
+                    <h4 style={{ color: 'var(--text-muted)', margin: '0 0 15px 0', fontSize: '1.1rem' }}>🌍 公共牌面 🌍</h4>
+                    <div style={{ display: 'flex', gap: '15px', justifyContent: 'center' }}>
+                      {gameState.community_cards.map((card, idx) => (
+                        <div key={idx} className={`card community ${getCardColorClass(card)}`} style={{ transform: 'none', width: '60px', height: '84px', fontSize: '1.5rem', boxShadow: '0 4px 10px rgba(0,0,0,0.5)' }}>{card}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div style={{ marginBottom: '30px' }}>
+                  {gameState.showdown_results.map((r, idx) => (
+                    <div key={idx} style={{ marginBottom: '15px', fontSize: '1.4rem' }}>
+                      赢家 <strong style={{ color: 'var(--accent)' }}>{r.name}</strong> 依靠 <span style={{color:'white', fontWeight:'bold'}}>{r.reason}</span> <br/>
+                      通吃 <span style={{ color: '#4caf50', fontWeight: 'bold' }}>💰 {r.won}</span> 筹码！
+                    </div>
                   ))}
                 </div>
-              </div>
+              </>
             )}
-            <div style={{ marginBottom: '30px' }}>
-              {gameState.showdown_results.map((r, idx) => (
-                <div key={idx} style={{ marginBottom: '15px', fontSize: '1.4rem' }}>
-                  赢家 <strong style={{ color: 'var(--accent)' }}>{r.name}</strong> 依靠 <span style={{color:'white', fontWeight:'bold'}}>{r.reason}</span> <br/>
-                  通吃 <span style={{ color: '#4caf50', fontWeight: 'bold' }}>💰 {r.won}</span> 筹码！
-                </div>
-              ))}
-            </div>
 
             {/* 弃牌获胜时的亮牌选项 */}
             {(() => {

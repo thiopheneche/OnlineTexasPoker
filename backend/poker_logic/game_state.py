@@ -34,3 +34,8 @@ class GameState(BaseModel):
     players: List[Player] = Field(default_factory=list)
     button_index: int = 0
     current_turn_index: int = 0
+    # Run-it-twice fields
+    first_allin_player_id: str = ""
+    awaiting_run_twice: bool = False
+    run_it_twice: int = 0  # 0=undecided, 1=once, 2=twice
+    run_twice_boards: List[List[str]] = Field(default_factory=list)  # [[board1], [board2]]
