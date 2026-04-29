@@ -37,7 +37,6 @@ function App() {
     setGlobalChips(0);
     setCurrentTableId(null);
     localStorage.removeItem(STORAGE_USERNAME_KEY);
-    localStorage.removeItem(STORAGE_TABLE_KEY);
   }, []);
 
   useEffect(() => {
@@ -119,7 +118,8 @@ function App() {
       });
       const data = await res.json();
       if (data.success) {
-        completeLogin(nextUsername, data.global_chips ?? 5);
+        const reconnectTableId = localStorage.getItem(STORAGE_TABLE_KEY)?.trim();
+        completeLogin(nextUsername, data.global_chips ?? 5, reconnectTableId || null);
       } else {
         setLoginError(data.error || 'ID 已被在线玩家占用，请换个名称！');
       }

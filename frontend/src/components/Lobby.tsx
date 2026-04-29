@@ -26,6 +26,7 @@ export const Lobby: React.FC<Props> = ({ onJoinTable, onLogout, username, global
   const [smallBlind, setSmallBlind] = useState<number>(25);
   const [bigBlind, setBigBlind] = useState<number>(50);
   const [chipError, setChipError] = useState<string>('');
+  const reconnectTableId = localStorage.getItem('poker_table_id')?.trim() || '';
 
   const fetchTables = async () => {
     setLoading(true);
@@ -172,6 +173,13 @@ export const Lobby: React.FC<Props> = ({ onJoinTable, onLogout, username, global
             每次进入或创建牌桌消耗 <strong style={{color:'var(--danger)'}}>1💎</strong>。
             离开牌桌时，您手中的游戏筹码每满 <strong>1000</strong> 可兑换 <strong style={{color:'gold'}}>1💎</strong> 全局筹码（向下取整）。
           </p>
+          {reconnectTableId && (
+            <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'center' }}>
+              <button onClick={() => onJoinTable(reconnectTableId)} className="btn-start">
+                继续刚才的牌桌 #{reconnectTableId}
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
