@@ -87,7 +87,13 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
     };
     return () => {
       if (peekTimerRef.current) clearTimeout(peekTimerRef.current);
-      ws.current?.close();
+      const socket = ws.current;
+      ws.current = null;
+      if (!leavingRef.current) {
+        socket?.close();
+        return;
+      }
+      socket?.close();
     };
   }, [tableId, clientId, chatOpen]);
 
@@ -111,11 +117,17 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
   };
 
   const handleLeaveTable = useCallback(() => {
+    if (leavingRef.current) return;
     leavingRef.current = true;
     localStorage.removeItem('poker_table_id');
-    if (ws.current?.readyState === WebSocket.OPEN) {
-      ws.current.send(JSON.stringify({ action: 'leave' }));
-      setTimeout(() => onLeave(), 150);
+    const socket = ws.current;
+    ws.current = null;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ action: 'leave' }));
+      setTimeout(() => {
+        socket.close();
+        onLeave();
+      }, 150);
       return;
     }
     onLeave();
