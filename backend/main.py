@@ -205,6 +205,21 @@ def _find_reconnectable_player(username: str):
     return None, None
 
 
+def _debug_table_snapshot(table_id: str):
+    state = tables.get(table_id)
+    if not state:
+        return []
+    return [
+        {
+            "id": p.id,
+            "is_online": p.is_online,
+            "is_active": p.is_active,
+            "chips": p.chips,
+        }
+        for p in state.players
+    ]
+
+
 @app.post("/api/login")
 async def login(req: LoginRequest):
     username = req.username.strip()
@@ -213,6 +228,7 @@ async def login(req: LoginRequest):
 
     _ensure_user(username)
     reconnect_table_id, reconnect_player = _find_reconnectable_player(username)
+    logger.info("Login attempt for %s, active=%s, reconnect_table_id=%s", username, username in active_users, reconnect_table_id)
 
     if username in active_users and reconnect_player is None:
         return {"success": False, "error": "该 ID 当前已在线，请换一个名称"}
@@ -323,6 +339,7 @@ async def websocket_endpoint(websocket: WebSocket, table_id: str, client_id: str
     global_deck = decks[table_id]
 
     await manager.connect(websocket, table_id)
+    logger.info("Table websocket connected: table=%s, client=%s", table_id, client_id)
     _cancel_reconnect_task(table_id, client_id)
     recent_disconnects.pop(client_id, None)
 
@@ -336,6 +353,7 @@ async def websocket_endpoint(websocket: WebSocket, table_id: str, client_id: str
             player.is_active = True
 
     await manager.broadcast_state(table_id)
+    logger.info("Broadcast after connect: table=%s snapshot=%s", table_id, _debug_table_snapshot(table_id))
 
     async def cb():
         await manager.broadcast_state(table_id)
@@ -357,6 +375,7 @@ async def websocket_endpoint(websocket: WebSocket, table_id: str, client_id: str
 
                 if action == "leave":
                     explicit_leave = True
+                    logger.info("Explicit leave: table=%s, client=%s", table_id, client_id)
                     await _finalize_player_leave(table_id, client_id, force_fold=True)
                     await websocket.close()
                     break
@@ -370,6 +389,7 @@ async def websocket_endpoint(websocket: WebSocket, table_id: str, client_id: str
             await manager.broadcast_state(table_id)
 
     except WebSocketDisconnect:
+        logger.info("WebSocketDisconnect: table=%s, client=%s", table_id, client_id)
         pass
     finally:
         manager.disconnect(websocket, table_id)
@@ -382,7 +402,8 @@ async def websocket_endpoint(websocket: WebSocket, table_id: str, client_id: str
             return
         player.is_online = False
         recent_disconnects[client_id] = datetime.utcnow()
-        logger.info("Player %s disconnected from table %s, marking offline", client_id, table_id)
+        logger.info("Player %s disconnected from table %s, marking offline, snapshot_before=%s", client_id, table_id, _debug_table_snapshot(table_id))
         await manager.broadcast_state(table_id)
+        logger.info("Broadcast after disconnect: table=%s snapshot_after=%s", table_id, _debug_table_snapshot(table_id))
         task_key = f"{table_id}:{client_id}"
         table_reconnect_tasks[task_key] = asyncio.create_task(_schedule_reconnect_cleanup(table_id, client_id))
