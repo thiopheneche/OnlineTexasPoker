@@ -5,6 +5,7 @@ import asyncio
 import json
 import uuid
 import math
+import logging
 from pathlib import Path
 from datetime import datetime, timedelta
 from pydantic import BaseModel
@@ -26,6 +27,7 @@ tables: Dict[str, GameState] = {}
 decks: Dict[str, Deck] = {}
 USER_DATA_PATH = Path(__file__).parent / "data" / "users.json"
 RECONNECT_GRACE_SECONDS = 60
+logger = logging.getLogger("texas_poker")
 
 class ConnectionManager:
     def __init__(self):
@@ -195,6 +197,14 @@ async def _schedule_reconnect_cleanup(table_id: str, client_id: str):
         table_reconnect_tasks.pop(task_key, None)
 
 
+def _find_reconnectable_player(username: str):
+    for table_id, state in tables.items():
+        for player in state.players:
+            if player.id == username and not player.is_online:
+                return table_id, player
+    return None, None
+
+
 @app.post("/api/login")
 async def login(req: LoginRequest):
     username = req.username.strip()
@@ -202,8 +212,9 @@ async def login(req: LoginRequest):
         return {"success": False, "error": "请输入有效 ID"}
 
     _ensure_user(username)
+    reconnect_table_id, reconnect_player = _find_reconnectable_player(username)
 
-    if username in active_users:
+    if username in active_users and reconnect_player is None:
         return {"success": False, "error": "该 ID 当前已在线，请换一个名称"}
 
     locked_until = recent_disconnects.get(username)
@@ -211,7 +222,12 @@ async def login(req: LoginRequest):
         recent_disconnects.pop(username, None)
         locked_until = None
 
-    return {"success": True, "global_chips": user_global_chips.get(username, 5), "reconnect_locked": bool(locked_until)}
+    return {
+        "success": True,
+        "global_chips": user_global_chips.get(username, 5),
+        "reconnect_locked": bool(locked_until),
+        "reconnect_table_id": reconnect_table_id,
+    }
 
 
 @app.websocket("/ws/session/{username}")
@@ -366,6 +382,7 @@ async def websocket_endpoint(websocket: WebSocket, table_id: str, client_id: str
             return
         player.is_online = False
         recent_disconnects[client_id] = datetime.utcnow()
+        logger.info("Player %s disconnected from table %s, marking offline", client_id, table_id)
         await manager.broadcast_state(table_id)
         task_key = f"{table_id}:{client_id}"
         table_reconnect_tasks[task_key] = asyncio.create_task(_schedule_reconnect_cleanup(table_id, client_id))

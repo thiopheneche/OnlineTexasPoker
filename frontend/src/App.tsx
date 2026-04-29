@@ -56,7 +56,7 @@ function App() {
         });
         const data = await res.json();
         if (data.success) {
-          completeLogin(savedUsername, data.global_chips ?? 5, savedTableId || null);
+          completeLogin(savedUsername, data.global_chips ?? 5, data.reconnect_table_id || savedTableId || null);
         } else {
           localStorage.removeItem(STORAGE_USERNAME_KEY);
           localStorage.removeItem(STORAGE_TABLE_KEY);
@@ -118,7 +118,7 @@ function App() {
       });
       const data = await res.json();
       if (data.success) {
-        const reconnectTableId = localStorage.getItem(STORAGE_TABLE_KEY)?.trim();
+        const reconnectTableId = data.reconnect_table_id || localStorage.getItem(STORAGE_TABLE_KEY)?.trim();
         completeLogin(nextUsername, data.global_chips ?? 5, reconnectTableId || null);
       } else {
         setLoginError(data.error || 'ID 已被在线玩家占用，请换个名称！');
