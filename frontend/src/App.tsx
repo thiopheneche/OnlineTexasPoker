@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { PokerTable } from './components/PokerTable';
 import { Lobby } from './components/Lobby';
 import { DisclaimerModal } from './components/Disclaimer';
@@ -15,12 +15,14 @@ function App() {
   const [loginError, setLoginError] = useState<string>('');
   const [globalChips, setGlobalChips] = useState<number>(0);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
+  const pendingReconnectTableRef = useRef<string | null>(null);
 
   const completeLogin = useCallback((nextUsername: string, chips: number, nextTableId?: string | null) => {
     setUsername(nextUsername);
     setLoginInput(nextUsername);
     setGlobalChips(chips);
     localStorage.setItem(STORAGE_USERNAME_KEY, nextUsername);
+    pendingReconnectTableRef.current = nextTableId || null;
     if (nextTableId) {
       setCurrentTableId(nextTableId);
       localStorage.setItem(STORAGE_TABLE_KEY, nextTableId);
@@ -129,11 +131,13 @@ function App() {
   };
 
   const handleJoinTable = useCallback((tableId: string) => {
+    pendingReconnectTableRef.current = null;
     setCurrentTableId(tableId);
     localStorage.setItem(STORAGE_TABLE_KEY, tableId);
   }, []);
 
   const handleLeaveTable = useCallback(() => {
+    pendingReconnectTableRef.current = null;
     setCurrentTableId(null);
     localStorage.removeItem(STORAGE_TABLE_KEY);
   }, []);

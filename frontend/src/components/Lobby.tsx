@@ -4,6 +4,7 @@ import { DisclaimerModal } from './Disclaimer';
 import { TutorialModal } from './Tutorial';
 
 const API_BASE = 'https://texaspoker.thiopheneche.dpdns.org';
+const STORAGE_TABLE_KEY = 'poker_table_id';
 
 type TableInfo = {
   table_id: string;
@@ -26,7 +27,7 @@ export const Lobby: React.FC<Props> = ({ onJoinTable, onLogout, username, global
   const [smallBlind, setSmallBlind] = useState<number>(25);
   const [bigBlind, setBigBlind] = useState<number>(50);
   const [chipError, setChipError] = useState<string>('');
-  const reconnectTableId = localStorage.getItem('poker_table_id')?.trim() || '';
+  const reconnectTableId = localStorage.getItem(STORAGE_TABLE_KEY)?.trim() || '';
 
   const fetchTables = async () => {
     setLoading(true);
@@ -60,6 +61,13 @@ export const Lobby: React.FC<Props> = ({ onJoinTable, onLogout, username, global
       clearInterval(interval);
     };
   }, []);
+
+  useEffect(() => {
+    if (reconnectTableId) {
+      const timeout = setTimeout(() => onJoinTable(reconnectTableId), 0);
+      return () => clearTimeout(timeout);
+    }
+  }, [onJoinTable, reconnectTableId]);
 
   const handleCreateTable = async () => {
     setChipError('');
