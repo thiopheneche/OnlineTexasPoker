@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Coins, Play, UserCircle, LogOut, Check, ArrowUpCircle, XCircle, MessageSquare, Send } from 'lucide-react';
 import { TutorialModal } from './Tutorial';
 
@@ -9,6 +9,7 @@ export type Player = {
   current_bet: number;
   total_investment: number;
   is_active: boolean;
+  is_online: boolean;
   has_acted: boolean;
   revives_used: number;
   hole_cards: string[];
@@ -55,7 +56,6 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
   const [raiseAmount, setRaiseAmount] = useState<number>(0);
   const [bankruptTimer, setBankruptTimer] = useState<number | null>(null);
   const [isSpectating, setIsSpectating] = useState<boolean>(false);
-  const [hasWonGale, setHasWonGale] = useState<boolean>(false);
   const [victoryDismissed, setVictoryDismissed] = useState<boolean>(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState<string>('');
@@ -65,8 +65,11 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
   const peekTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ws = useRef<WebSocket | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
+  const leavingRef = useRef(false);
 
   useEffect(() => {
+    localStorage.setItem('poker_table_id', tableId);
+    leavingRef.current = false;
     ws.current = new WebSocket(`wss://texaspoker.thiopheneche.dpdns.org/ws/${tableId}/${clientId}`);
     ws.current.onmessage = (event) => {
       try {
@@ -82,26 +85,41 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
         }
       } catch (e) { console.error("Failed to parse", e); }
     };
-    return () => ws.current?.close();
-  }, [tableId, clientId]);
+    return () => {
+      if (peekTimerRef.current) clearTimeout(peekTimerRef.current);
+      ws.current?.close();
+    };
+  }, [tableId, clientId, chatOpen]);
 
   // Auto-scroll chat to bottom
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages]);
 
-  // Clear unread when chat is opened
-  useEffect(() => {
-    if (chatOpen) setUnreadCount(0);
-  }, [chatOpen]);
-
-  useEffect(() => {
-     if(gameState) setRaiseAmount(gameState.current_highest_bet + gameState.min_raise);
-  }, [gameState?.current_highest_bet, gameState?.min_raise, gameState?.phase]);
-
   const handleAction = (action: string, amount: number = 0) => {
       ws.current?.send(JSON.stringify({ action, amount }));
   };
+
+  const handleChatToggle = () => {
+    setChatOpen(prev => {
+      const next = !prev;
+      if (next) {
+        setUnreadCount(0);
+      }
+      return next;
+    });
+  };
+
+  const handleLeaveTable = useCallback(() => {
+    leavingRef.current = true;
+    localStorage.removeItem('poker_table_id');
+    if (ws.current?.readyState === WebSocket.OPEN) {
+      ws.current.send(JSON.stringify({ action: 'leave' }));
+      setTimeout(() => onLeave(), 150);
+      return;
+    }
+    onLeave();
+  }, [onLeave]);
 
   const sendChat = () => {
     const msg = chatInput.trim();
@@ -137,42 +155,35 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
 
   const me = gameState?.players.find(p => p.id === clientId);
   const currentTurnPlayer = gameState?.players[gameState.current_turn_index] || null;
+  const derivedRaiseAmount = gameState ? gameState.current_highest_bet + gameState.min_raise : 0;
   
   const isBankrupt = me && me.chips === 0 && (gameState?.phase === "WAITING" || gameState?.phase === "SHOWDOWN");
+  const shouldShowBankruptModal = Boolean(isBankrupt && !isSpectating);
+  const shouldShowVictory = Boolean(gameState && me && me.chips > 0 && gameState.players.length >= 2 && gameState.players.filter(p => p.id !== clientId).every(p => p.chips === 0 && p.revives_used >= 3 && ((gameState.phase === "WAITING" || gameState.phase === "SHOWDOWN") || !p.is_active)) && !victoryDismissed);
 
   useEffect(() => {
-    if (isBankrupt && !isSpectating) {
-        if (bankruptTimer === null) setBankruptTimer(60);
-    } else {
-        setBankruptTimer(null);
-    }
-  }, [isBankrupt, isSpectating]);
+    if (!shouldShowBankruptModal) return;
+    const timeout = setTimeout(() => setBankruptTimer(60), 0);
+    return () => clearTimeout(timeout);
+  }, [shouldShowBankruptModal]);
+
+  useEffect(() => {
+    if (shouldShowBankruptModal) return;
+    const timeout = setTimeout(() => setBankruptTimer(null), 0);
+    return () => clearTimeout(timeout);
+  }, [shouldShowBankruptModal]);
 
   useEffect(() => {
       if (bankruptTimer === null) return;
       if (bankruptTimer <= 0) {
-          onLeave();
+          handleLeaveTable();
           return;
       }
       const interval = setInterval(() => {
           setBankruptTimer(prev => prev !== null ? prev - 1 : null);
       }, 1000);
       return () => clearInterval(interval);
-  }, [bankruptTimer, onLeave]);
-
-  useEffect(() => {
-    if (gameState && me) {
-      const isPhaseSafe = gameState.phase === "WAITING" || gameState.phase === "SHOWDOWN";
-      const allOthersBusted = gameState.players.length >= 2 && gameState.players.filter(p => p.id !== clientId).every(p => {
-          return p.chips === 0 && p.revives_used >= 3 && (isPhaseSafe || !p.is_active);
-      });
-      if (allOthersBusted && !hasWonGale) setHasWonGale(true);
-      if (hasWonGale) {
-         const activeOpponents = gameState.players.filter(p => p.id !== clientId && p.chips > 0);
-         if (activeOpponents.length > 0) { setHasWonGale(false); setVictoryDismissed(false); }
-      }
-    }
-  }, [gameState, me, clientId, hasWonGale]);
+  }, [bankruptTimer, handleLeaveTable]);
 
   if (!gameState) {
     return <div className="flex-center"><h2>🌀 正在接入牌桌 #{tableId}...</h2></div>;
@@ -185,6 +196,7 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
   const showSettlement = gameState.phase === "SHOWDOWN" && gameState.showdown_results && gameState.showdown_results.length > 0;
   const minRaiseTotal = gameState.current_highest_bet + gameState.min_raise;
   const maxRaiseTotal = me ? me.chips + me.current_bet : 0;
+  const effectiveRaiseAmount = Math.min(Math.max(raiseAmount || derivedRaiseAmount, minRaiseTotal), Math.max(minRaiseTotal, maxRaiseTotal));
   const showRunTwiceBoards = gameState.run_it_twice === 2 && gameState.run_twice_boards.length === 2 && gameState.run_twice_boards.some(board => board.length > 0);
   const runTwiceBaseCount = gameState.community_cards.length;
 
@@ -198,8 +210,9 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
     <div className="poker-table-container" style={{ position: 'relative' }}>
 
       {/* ===== 聊天浮动按钮 ===== */}
-      <button 
-        onClick={() => setChatOpen(!chatOpen)} 
+        <button 
+          onClick={handleChatToggle} 
+
         style={{ 
           position: 'fixed', bottom: '160px', right: '30px', zIndex: 9999,
           width: '50px', height: '50px', borderRadius: '50%', border: 'none',
@@ -293,7 +306,8 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
       )}
       
       {/* 破产复活弹窗 */}
-      {isBankrupt && !isSpectating && me && (
+       {shouldShowBankruptModal && me && (
+
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ background: '#1a1a1a', padding: '40px', borderRadius: '20px', border: '2px solid var(--danger)', textAlign: 'center', width: '400px' }}>
             <h1 style={{ color: 'var(--danger)', marginBottom: '10px' }}>💔 您已破产</h1>
@@ -314,7 +328,8 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
                  👁️ 留在本桌观战
                </button>
             )}
-            <button onClick={onLeave} style={{ width: '100%', padding: '15px', background: 'transparent', border: '1px solid gray', color: 'gray', borderRadius: '10px', fontSize: '1rem', cursor: 'pointer'}}>
+               <button onClick={handleLeaveTable} style={{ width: '100%', padding: '15px', background: 'transparent', border: '1px solid gray', color: 'gray', borderRadius: '10px', fontSize: '1rem', cursor: 'pointer'}}>
+
               逃离牌局并返回大厅
             </button>
           </div>
@@ -353,7 +368,7 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
       )}
 
       {/* 结算弹窗 */}
-      {showSettlement && (!isBankrupt || isSpectating) && !hasWonGale && (
+      {showSettlement && (!isBankrupt || isSpectating) && !shouldShowVictory && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ background: '#111', padding: '40px', borderRadius: '20px', border: '2px solid gold', textAlign: 'center', minWidth: '500px', boxShadow: '0 10px 40px rgba(255, 215, 0, 0.2)', maxHeight: '90vh', overflowY: 'auto' }}>
             <h1 style={{ color: 'gold', margin: '0 0 30px 0', fontSize: '2.5rem', textShadow: '0 2px 10px rgba(255, 215, 0, 0.3)' }}>🏆 巅峰决战 🏆</h1>
@@ -457,7 +472,7 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
                   <Play size={20} /> 新的一局
                 </button>
               )}
-              <button onClick={onLeave} style={{ padding: '15px 40px', fontSize: '1.2rem', background: 'transparent', border: '1px solid gray', color: 'gray', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button onClick={handleLeaveTable} style={{ padding: '15px 40px', fontSize: '1.2rem', background: 'transparent', border: '1px solid gray', color: 'gray', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <LogOut size={20} /> 返回大厅
               </button>
             </div>
@@ -466,7 +481,7 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
       )}
       
       {/* 终极大赢家弹窗 */}
-      {hasWonGale && !victoryDismissed && me && me.chips > 0 && (
+      {shouldShowVictory && me && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(255,215,0,0.2)', backdropFilter: 'blur(5px)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
            <div style={{ background: 'linear-gradient(135deg, #2a2a2a, #111)', padding: '50px', borderRadius: '20px', border: '3px solid gold', textAlign: 'center', boxShadow: '0px 0px 50px rgba(255,215,0,0.4)', maxWidth: '500px' }}>
              <h1 style={{ fontSize: '3.5rem', color: 'gold', textShadow: '0px 0px 15px gold', margin: '0 0 20px 0' }}>👑 绝对征服 👑</h1>
@@ -475,7 +490,8 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
                <span style={{ fontSize: '2rem', color: '#4caf50', fontWeight: 'bold', display: 'block', margin: '15px 0' }}>💰 {me.chips}</span>
              </p>
              <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                <button onClick={onLeave} style={{ padding: '15px', background: 'linear-gradient(to right, #e65c00, #F9D423)', color: 'white', border: 'none', borderRadius: '10px', fontSize: '1.2rem', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0px 5px 15px rgba(230, 92, 0, 0.4)'}}>
+                 <button onClick={handleLeaveTable} style={{ padding: '15px', background: 'linear-gradient(to right, #e65c00, #F9D423)', color: 'white', border: 'none', borderRadius: '10px', fontSize: '1.2rem', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0px 5px 15px rgba(230, 92, 0, 0.4)'}}>
+
                   🛑 带着荣誉离开 (退回大厅)
                 </button>
                 <button onClick={() => setVictoryDismissed(true)} style={{ padding: '15px', background: 'transparent', color: 'gold', border: '2px solid gold', borderRadius: '10px', fontSize: '1.2rem', cursor: 'pointer', fontWeight: 'bold'}}>
@@ -488,7 +504,7 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
 
       <header className="header" style={{ position: 'relative', zIndex: 10000 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-           <button onClick={onLeave} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: 'var(--text-main)', padding: '10px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap:'5px' }}>
+           <button onClick={handleLeaveTable} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: 'var(--text-main)', padding: '10px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap:'5px' }}>
              <LogOut size={16} /> 退大厅
            </button>
            <TutorialModal variant="rules" trigger="button" />
@@ -508,10 +524,12 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
           {gameState.players.map((p) => {
              if (p.id === clientId) return null;
              return (
-               <div key={p.id} className="opponent-card" style={{opacity: p.is_active ? 1 : 0.4}}>
+                <div key={p.id} className="opponent-card" style={{opacity: p.is_online ? (p.is_active ? 1 : 0.4) : 0.35, filter: p.is_online ? 'grayscale(0)' : 'grayscale(1)'}}>
+
                  <UserCircle size={20} className="icon" />
                  <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                   <span>{p.name} {p.chips === 0 && p.is_active && "(All-In)"}</span>
+                    <span>{p.name} {!p.is_online ? '[🔴 掉线中]' : p.chips === 0 && p.is_active ? '(All-In)' : ''}</span>
+
                    <span>💰 {p.chips} | 注: {p.current_bet}</span>
                    <span style={{fontSize: '0.8rem', color:'var(--text-muted)'}}>❤️ 剩余买入: {3 - p.revives_used}</span>
                  </div>
@@ -644,12 +662,14 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
                   <button onClick={() => setRaiseAmount(Math.min(Math.floor(gameState.pot / 2) + gameState.current_highest_bet, maxRaiseTotal))} style={presetBtnStyle}>½底池</button>
                   <button onClick={() => setRaiseAmount(Math.min(gameState.pot + gameState.current_highest_bet, maxRaiseTotal))} style={presetBtnStyle}>满底池</button>
                   <input 
-                    type="number" min={minRaiseTotal} max={maxRaiseTotal} value={raiseAmount} 
+                     type="number" min={minRaiseTotal} max={maxRaiseTotal} value={effectiveRaiseAmount}
+
                     onChange={(e) => { const v = Number(e.target.value); if (!isNaN(v)) setRaiseAmount(v); }} 
                     style={{ width: '70px', padding: '4px 6px', background: 'rgba(0,0,0,0.5)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '6px', fontSize: 'clamp(0.7rem, 1.1vw, 0.9rem)', textAlign: 'center', outline: 'none' }} 
                   />
-                  <button className="btn-bet" onClick={() => handleAction("raise", raiseAmount - me.current_bet)} disabled={raiseAmount > maxRaiseTotal || raiseAmount < minRaiseTotal} style={{ fontSize: 'clamp(0.7rem, 1.1vw, 0.9rem)' }}>
-                    <ArrowUpCircle size={14} /> 加注到 {raiseAmount}
+                   <button className="btn-bet" onClick={() => handleAction("raise", effectiveRaiseAmount - me.current_bet)} disabled={effectiveRaiseAmount > maxRaiseTotal || effectiveRaiseAmount < minRaiseTotal} style={{ fontSize: 'clamp(0.7rem, 1.1vw, 0.9rem)' }}>
+                     <ArrowUpCircle size={14} /> 加注到 {effectiveRaiseAmount}
+
                   </button>
                   <button style={{ background: 'linear-gradient(135deg, #7b1fa2, #4a148c)', color: 'white', opacity: disableControls ? 0.3 : 1, cursor: disableControls ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: 'clamp(0.7rem, 1.1vw, 0.9rem)' }} disabled={disableControls} onClick={() => handleAction("all-in")}>
                     🔥 ALL-IN

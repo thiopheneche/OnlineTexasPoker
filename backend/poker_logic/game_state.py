@@ -17,6 +17,7 @@ class Player(BaseModel):
     current_bet: int = 0
     total_investment: int = 0
     is_active: bool = True
+    is_online: bool = True
     has_acted: bool = False
     revives_used: int = 0
     hole_cards: List[str] = Field(default_factory=list)

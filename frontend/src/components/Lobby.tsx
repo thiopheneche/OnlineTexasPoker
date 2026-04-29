@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { PlusCircle, LogIn, RefreshCcw, Users, Gem } from 'lucide-react';
+import { PlusCircle, LogIn, RefreshCcw, Users, Gem, LogOut } from 'lucide-react';
 import { DisclaimerModal } from './Disclaimer';
 import { TutorialModal } from './Tutorial';
+
+const API_BASE = 'https://texaspoker.thiopheneche.dpdns.org';
 
 type TableInfo = {
   table_id: string;
@@ -11,12 +13,13 @@ type TableInfo = {
 
 type Props = {
   onJoinTable: (tableId: string) => void;
+  onLogout: () => void;
   username: string;
   globalChips: number;
   setGlobalChips: (chips: number) => void;
 };
 
-export const Lobby: React.FC<Props> = ({ onJoinTable, username, globalChips, setGlobalChips }) => {
+export const Lobby: React.FC<Props> = ({ onJoinTable, onLogout, username, globalChips, setGlobalChips }) => {
   const [tables, setTables] = useState<TableInfo[]>([]);
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -28,10 +31,10 @@ export const Lobby: React.FC<Props> = ({ onJoinTable, username, globalChips, set
     setLoading(true);
     try {
       const [tablesRes, usersRes] = await Promise.all([
-        fetch('https://texaspoker.thiopheneche.dpdns.org/api/tables'),
-        fetch('https://texaspoker.thiopheneche.dpdns.org/api/users')
+        fetch(`${API_BASE}/api/tables`),
+        fetch(`${API_BASE}/api/users`)
       ]);
-      
+
       if (tablesRes.ok) {
         const data = await tablesRes.json();
         setTables(data);
@@ -41,23 +44,26 @@ export const Lobby: React.FC<Props> = ({ onJoinTable, username, globalChips, set
         setOnlineUsers(userData.users);
       }
     } catch (e) {
-      console.error("Failed to fetch data", e);
+      console.error('Failed to fetch data', e);
     }
     setLoading(false);
   };
 
   useEffect(() => {
-    fetchTables();
-    
-    // Auto-refresh the lobby every 5 seconds to keep online users updated
+    const timeout = setTimeout(() => {
+      void fetchTables();
+    }, 0);
     const interval = setInterval(fetchTables, 5000);
-    return () => clearInterval(interval);
+    return () => {
+      clearTimeout(timeout);
+      clearInterval(interval);
+    };
   }, []);
 
   const handleCreateTable = async () => {
     setChipError('');
     try {
-      const res = await fetch('https://texaspoker.thiopheneche.dpdns.org/api/tables', { 
+      const res = await fetch(`${API_BASE}/api/tables`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ small_blind: smallBlind, big_blind: bigBlind, username })
@@ -68,18 +74,18 @@ export const Lobby: React.FC<Props> = ({ onJoinTable, username, globalChips, set
           setGlobalChips(data.global_chips);
           onJoinTable(data.table_id);
         } else {
-          setChipError(data.error || "筹码不足");
+          setChipError(data.error || '筹码不足');
         }
       }
     } catch (e) {
-      console.error("Failed to create table", e);
+      console.error('Failed to create table', e);
     }
   };
 
   const handleJoinTable = async (tableId: string) => {
     setChipError('');
     try {
-      const res = await fetch(`https://texaspoker.thiopheneche.dpdns.org/api/tables/join/${tableId}`, { 
+      const res = await fetch(`${API_BASE}/api/tables/join/${tableId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username })
@@ -90,32 +96,34 @@ export const Lobby: React.FC<Props> = ({ onJoinTable, username, globalChips, set
           setGlobalChips(data.global_chips);
           onJoinTable(tableId);
         } else {
-          setChipError(data.error || "操作失败");
+          setChipError(data.error || '操作失败');
         }
       }
     } catch (e) {
-      console.error("Failed to join table", e);
+      console.error('Failed to join table', e);
     }
   };
 
   return (
     <div className="poker-table-container pb-10" style={{ padding: '40px', display: 'flex', flexDirection: 'column' }}>
-      
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 20px', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }}>
           <h1 style={{ color: 'var(--primary)', margin: 0 }}>💎 扑克大厅</h1>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'linear-gradient(135deg, rgba(255,215,0,0.15), rgba(255,215,0,0.05))', padding: '8px 18px', borderRadius: '20px', border: '1px solid rgba(255,215,0,0.3)' }}>
             <Gem size={18} style={{ color: 'gold' }} />
             <span style={{ color: 'gold', fontWeight: 'bold', fontSize: '1.1rem' }}>{globalChips}</span>
             <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>全局筹码</span>
           </div>
+          <div style={{ color: 'var(--text-muted)', fontSize: '0.95rem' }}>当前账号：{username}</div>
         </div>
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
           <TutorialModal variant="site" trigger="banner" />
           <DisclaimerModal trigger="banner" />
+          <button onClick={onLogout} className="btn-start" style={{ background: 'rgba(255,255,255,0.08)', color: '#fff' }}>
+            <LogOut size={18} /> 退出登录
+          </button>
         </div>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-          
           <div style={{ display: 'flex', alignItems: 'center', gap: '5px', background: 'rgba(0,0,0,0.3)', padding: '5px 10px', borderRadius: '8px' }}>
             <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>小盲/大盲:</span>
             <input type="number" min="1" value={smallBlind} onChange={e => setSmallBlind(Number(e.target.value))} style={{ width: '50px', background:'transparent', color:'white', border:'1px solid rgba(255,255,255,0.2)', padding:'5px', borderRadius:'4px' }} />
@@ -126,7 +134,7 @@ export const Lobby: React.FC<Props> = ({ onJoinTable, username, globalChips, set
           <button onClick={fetchTables} className="btn-start" style={{ background: 'rgba(255,255,255,0.1)', color: '#fff' }}>
             <RefreshCcw size={18} className={loading ? 'animate-spin' : ''} /> 刷新
           </button>
-          
+
           <button onClick={handleCreateTable} className="btn-bet" style={{ opacity: globalChips < 1 ? 0.4 : 1 }} disabled={globalChips < 1}>
             <PlusCircle size={18} /> 新建牌桌 (消耗1💎)
           </button>
@@ -144,7 +152,7 @@ export const Lobby: React.FC<Props> = ({ onJoinTable, username, globalChips, set
       <div style={{ padding: '0 20px', marginBottom: '25px' }}>
          <div style={{ background: 'rgba(0,0,0,0.3)', padding: '15px 20px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap', border: '1px solid rgba(255,255,255,0.05)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#03dac6', fontWeight: 'bold' }}>
-               <Users size={18} /> 
+               <Users size={18} />
                <span>全局在线 ({onlineUsers.length} 人):</span>
             </div>
             {onlineUsers.length > 0 ? (
@@ -177,11 +185,11 @@ export const Lobby: React.FC<Props> = ({ onJoinTable, username, globalChips, set
             {tables.map(t => (
               <div key={t.table_id} className="opponent-card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '25px' }}>
                 <h3 style={{ margin: '0 0 10px 0', color: 'white', fontSize: '1.2rem' }}>牌桌 #{t.table_id}</h3>
-                <p style={{ margin: '5px 0', fontSize: '0.95rem', color: 'var(--text-muted)' }}>当前玩家: {t.player_count} 人</p>
+                <p style={{ margin: '5px 0', fontSize: '0.95rem', color: 'var(--text-muted)' }}>当前在线: {t.player_count} 人</p>
                 <p style={{ margin: '5px 0 20px 0', fontSize: '0.95rem', color: 'var(--text-muted)' }}>游戏进度: {t.phase}</p>
-                <button 
-                  onClick={() => handleJoinTable(t.table_id)} 
-                  className="btn-start" 
+                <button
+                  onClick={() => handleJoinTable(t.table_id)}
+                  className="btn-start"
                   style={{ width: '100%', justifyContent: 'center', opacity: globalChips < 1 ? 0.4 : 1 }}
                   disabled={globalChips < 1}
                 >
