@@ -204,11 +204,26 @@ class PokerEngine:
         actual_players = [p for p in state.players if p.is_active]
         if len(actual_players) < 2:
             return
-            
-        state.button_index = (state.button_index + 1) % len(actual_players)
         
-        sb_player = actual_players[state.button_index]
-        bb_player = actual_players[(state.button_index + 1) % len(actual_players)]
+        # Rotate the button position through state.players (not the filtered list)
+        # This ensures consistent rotation even when player count changes
+        num_players = len(state.players)
+        next_btn = (state.button_index + 1) % num_players
+        # Find next player with chips > 0 to be the button/SB
+        for _ in range(num_players):
+            if state.players[next_btn].chips > 0:
+                break
+            next_btn = (next_btn + 1) % num_players
+        state.button_index = next_btn
+        
+        sb_player = state.players[state.button_index]
+        # Find next active player after SB to be BB
+        bb_idx = (state.button_index + 1) % num_players
+        for _ in range(num_players):
+            if state.players[bb_idx].chips > 0:
+                break
+            bb_idx = (bb_idx + 1) % num_players
+        bb_player = state.players[bb_idx]
 
         sb_amount = min(sb_player.chips, state.small_blind)
         sb_player.chips -= sb_amount
