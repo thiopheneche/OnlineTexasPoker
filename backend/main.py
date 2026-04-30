@@ -1,6 +1,6 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from typing import List, Dict, Set, Any
+from typing import List, Dict, Set, Any, Optional
 import json
 import uuid
 import math
@@ -69,7 +69,7 @@ DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 USERS_FILE = os.path.join(DATA_DIR, "users.json")
 ACCOUNT_TTL_SECONDS = 24 * 60 * 60
 
-def normalize_user_record(username: str, data: Any, now: float | None = None) -> Dict[str, Any]:
+def normalize_user_record(username: str, data: Any, now: Optional[float] = None) -> Dict[str, Any]:
     timestamp = now if now is not None else time.time()
     if isinstance(data, dict):
         chips = int(data.get("global_chips", 5))
@@ -105,7 +105,7 @@ user_accounts: Dict[str, Dict[str, Any]] = load_users()
 def save_accounts():
     save_users(user_accounts)
 
-def purge_expired_accounts(now: float | None = None):
+def purge_expired_accounts(now: Optional[float] = None):
     current_time = now if now is not None else time.time()
     expired_usernames = [
         username
@@ -120,7 +120,7 @@ def purge_expired_accounts(now: float | None = None):
         disconnected_users.pop(username, None)
     save_accounts()
 
-def ensure_account(username: str, now: float | None = None) -> Dict[str, Any]:
+def ensure_account(username: str, now: Optional[float] = None) -> Dict[str, Any]:
     current_time = now if now is not None else time.time()
     purge_expired_accounts(current_time)
     account = user_accounts.get(username)
@@ -130,7 +130,7 @@ def ensure_account(username: str, now: float | None = None) -> Dict[str, Any]:
         save_accounts()
     return account
 
-def update_last_login(username: str, now: float | None = None):
+def update_last_login(username: str, now: Optional[float] = None):
     current_time = now if now is not None else time.time()
     account = ensure_account(username, current_time)
     account["last_login_at"] = current_time
