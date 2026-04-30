@@ -60,6 +60,10 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
+active_users: Set[str] = set()
+disconnected_users: Dict[str, float] = {}
+disconnect_tasks: Dict[str, asyncio.Task] = {}
+
 # --- Persistent Users Data ---
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 USERS_FILE = os.path.join(DATA_DIR, "users.json")
@@ -139,10 +143,6 @@ def set_global_chips(username: str, chips: int):
     account = ensure_account(username)
     account["global_chips"] = chips
     save_accounts()
-
-active_users: Set[str] = set()
-disconnected_users: Dict[str, float] = {}
-disconnect_tasks: Dict[str, asyncio.Task] = {}
 
 class CreateTableRequest(BaseModel):
     small_blind: int = 25
