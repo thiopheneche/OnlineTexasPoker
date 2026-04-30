@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { PokerTable } from './components/PokerTable';
 import { Lobby } from './components/Lobby';
 import { DisclaimerModal } from './components/Disclaimer';
@@ -14,22 +14,14 @@ function App() {
   const [loginInput, setLoginInput] = useState<string>('');
   const [loginError, setLoginError] = useState<string>('');
   const [globalChips, setGlobalChips] = useState<number>(0);
-  const [isBootstrapping, setIsBootstrapping] = useState(true);
-  const pendingReconnectTableRef = useRef<string | null>(null);
 
-  const completeLogin = useCallback((nextUsername: string, chips: number, nextTableId?: string | null) => {
+  const completeLogin = useCallback((nextUsername: string, chips: number) => {
     setUsername(nextUsername);
     setLoginInput(nextUsername);
     setGlobalChips(chips);
     localStorage.setItem(STORAGE_USERNAME_KEY, nextUsername);
-    pendingReconnectTableRef.current = nextTableId || null;
-    if (nextTableId) {
-      setCurrentTableId(nextTableId);
-      localStorage.setItem(STORAGE_TABLE_KEY, nextTableId);
-    } else {
-      setCurrentTableId(null);
-      localStorage.removeItem(STORAGE_TABLE_KEY);
-    }
+    setCurrentTableId(null);
+    localStorage.removeItem(STORAGE_TABLE_KEY);
   }, []);
 
   const logout = useCallback(() => {
@@ -39,40 +31,9 @@ function App() {
     setGlobalChips(0);
     setCurrentTableId(null);
     localStorage.removeItem(STORAGE_USERNAME_KEY);
+    localStorage.removeItem(STORAGE_TABLE_KEY);
   }, []);
 
-  useEffect(() => {
-    const savedUsername = localStorage.getItem(STORAGE_USERNAME_KEY)?.trim();
-    const savedTableId = localStorage.getItem(STORAGE_TABLE_KEY)?.trim();
-    if (!savedUsername) {
-      setIsBootstrapping(false);
-      return;
-    }
-
-    const autoLogin = async () => {
-      try {
-        const res = await fetch(`${API_BASE}/api/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username: savedUsername })
-        });
-        const data = await res.json();
-        if (data.success) {
-          completeLogin(savedUsername, data.global_chips ?? 5, data.reconnect_table_id || savedTableId || null);
-        } else {
-          localStorage.removeItem(STORAGE_USERNAME_KEY);
-          localStorage.removeItem(STORAGE_TABLE_KEY);
-        }
-      } catch {
-        localStorage.removeItem(STORAGE_USERNAME_KEY);
-        localStorage.removeItem(STORAGE_TABLE_KEY);
-      } finally {
-        setIsBootstrapping(false);
-      }
-    };
-
-    void autoLogin();
-  }, [completeLogin]);
 
   useEffect(() => {
     if (!username) return;
@@ -104,7 +65,10 @@ function App() {
 
   useEffect(() => {
     if (username && !currentTableId) {
-      refreshChips();
+      const timeout = setTimeout(() => {
+        void refreshChips();
+      }, 0);
+      return () => clearTimeout(timeout);
     }
   }, [username, currentTableId, refreshChips]);
 
@@ -120,8 +84,7 @@ function App() {
       });
       const data = await res.json();
       if (data.success) {
-        const reconnectTableId = data.reconnect_table_id || localStorage.getItem(STORAGE_TABLE_KEY)?.trim();
-        completeLogin(nextUsername, data.global_chips ?? 5, reconnectTableId || null);
+        completeLogin(nextUsername, data.global_chips ?? 5);
       } else {
         setLoginError(data.error || 'ID 已被在线玩家占用，请换个名称！');
       }
@@ -131,20 +94,14 @@ function App() {
   };
 
   const handleJoinTable = useCallback((tableId: string) => {
-    pendingReconnectTableRef.current = null;
     setCurrentTableId(tableId);
     localStorage.setItem(STORAGE_TABLE_KEY, tableId);
   }, []);
 
   const handleLeaveTable = useCallback(() => {
-    pendingReconnectTableRef.current = null;
     setCurrentTableId(null);
     localStorage.removeItem(STORAGE_TABLE_KEY);
   }, []);
-
-  if (isBootstrapping) {
-    return <div className="flex-center"><h2>正在恢复登录状态...</h2></div>;
-  }
 
   if (!username) {
     return (
@@ -171,7 +128,8 @@ function App() {
             <DisclaimerModal trigger="link" />
           </div>
           <p style={{ fontSize: '0.8rem', color: 'gray', marginTop: '15px', lineHeight: '1.5' }}>
-            注：登录 ID 与全局筹码会保存在当前浏览器中，刷新页面后将自动恢复。
+              注：登录 ID 与全局筹码会保存在当前浏览器中，刷新页面后不会自动登录。
+
           </p>
         </div>
       </div>

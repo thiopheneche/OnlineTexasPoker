@@ -195,7 +195,9 @@ async def execute_leave_cleanup(table_id: str, client_id: str, cb):
         earned = math.floor(leaving_player.chips / 1000)
         user_global_chips[client_id] += earned
         save_chips()
-        
+
+    if leaving_player:
+        leaving_player.is_ready = False
     if global_game_state.phase not in (GamePhase.WAITING, GamePhase.SHOWDOWN):
         await PokerEngine.process_action(global_game_state, global_deck, client_id, "fold", 0, cb)
         
@@ -233,7 +235,6 @@ async def websocket_endpoint(websocket: WebSocket, table_id: str, client_id: str
         for p in global_game_state.players:
             if p.id == client_id:
                 p.is_online = True
-                
     await manager.broadcast_state(table_id)
     
     async def cb():

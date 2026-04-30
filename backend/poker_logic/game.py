@@ -101,8 +101,20 @@ class PokerEngine:
             return
             
         if state.phase in (GamePhase.WAITING, GamePhase.SHOWDOWN):
+            if action == "ready":
+                for p in state.players:
+                    if p.id == player_id and p.chips > 0:
+                        p.is_ready = True
+                return
+            if action == "unready":
+                for p in state.players:
+                    if p.id == player_id:
+                        p.is_ready = False
+                return
             if action == "start":
-                PokerEngine._start_new_hand(state, deck)
+                ready_players = [p for p in state.players if p.chips > 0]
+                if len(ready_players) >= 2 and all(p.is_ready for p in ready_players):
+                    PokerEngine._start_new_hand(state, deck)
             return
 
         # Block actions while awaiting run-twice decision
@@ -194,6 +206,7 @@ class PokerEngine:
             p.current_bet = 0
             p.total_investment = 0
             p.has_acted = False
+            p.is_ready = False
             if p.chips > 0:
                 p.is_active = True
                 p.hole_cards = [str(c) for c in deck.deal(2)]

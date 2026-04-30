@@ -28,6 +28,7 @@ export const Lobby: React.FC<Props> = ({ onJoinTable, onLogout, username, global
   const [bigBlind, setBigBlind] = useState<number>(50);
   const [chipError, setChipError] = useState<string>('');
   const reconnectTableId = localStorage.getItem(STORAGE_TABLE_KEY)?.trim() || '';
+  const reconnectTableExists = reconnectTableId ? tables.some(table => table.table_id === reconnectTableId) : false;
 
   const fetchTables = async () => {
     setLoading(true);
@@ -63,11 +64,17 @@ export const Lobby: React.FC<Props> = ({ onJoinTable, onLogout, username, global
   }, []);
 
   useEffect(() => {
-    if (reconnectTableId) {
-      const timeout = setTimeout(() => onJoinTable(reconnectTableId), 0);
-      return () => clearTimeout(timeout);
+    if (!reconnectTableId) {
+      return;
     }
-  }, [onJoinTable, reconnectTableId]);
+    if (loading) {
+      return;
+    }
+    if (tables.length > 0 && reconnectTableExists) {
+      return;
+    }
+    localStorage.removeItem(STORAGE_TABLE_KEY);
+  }, [loading, reconnectTableExists, reconnectTableId, tables.length]);
 
   const handleCreateTable = async () => {
     setChipError('');
@@ -181,9 +188,9 @@ export const Lobby: React.FC<Props> = ({ onJoinTable, onLogout, username, global
             每次进入或创建牌桌消耗 <strong style={{color:'var(--danger)'}}>1💎</strong>。
             离开牌桌时，您手中的游戏筹码每满 <strong>1000</strong> 可兑换 <strong style={{color:'gold'}}>1💎</strong> 全局筹码（向下取整）。
           </p>
-          {reconnectTableId && (
+          {reconnectTableId && reconnectTableExists && (
             <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'center' }}>
-              <button onClick={() => onJoinTable(reconnectTableId)} className="btn-start">
+              <button onClick={() => handleJoinTable(reconnectTableId)} className="btn-start">
                 继续刚才的牌桌 #{reconnectTableId}
               </button>
             </div>

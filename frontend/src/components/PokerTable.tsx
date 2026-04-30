@@ -10,6 +10,7 @@ export type Player = {
   total_investment: number;
   is_active: boolean;
   is_online: boolean;
+  is_ready: boolean;
   has_acted: boolean;
   revives_used: number;
   hole_cards: string[];
@@ -203,6 +204,8 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
 
   const isMyTurn = currentTurnPlayer?.id === clientId;
   const isWaitingOrShowdown = gameState.phase === "WAITING" || gameState.phase === "SHOWDOWN";
+  const readyPlayers = gameState.players.filter(p => p.chips > 0);
+  const allReady = readyPlayers.length >= 2 && readyPlayers.every(p => p.is_ready);
   const canCheck = me && (me.current_bet === gameState.current_highest_bet);
   const disableControls = !isMyTurn || isWaitingOrShowdown;
   const showSettlement = gameState.phase === "SHOWDOWN" && gameState.showdown_results && gameState.showdown_results.length > 0;
@@ -539,12 +542,14 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
                 <div key={p.id} className="opponent-card" style={{opacity: p.is_online ? (p.is_active ? 1 : 0.4) : 0.35, filter: p.is_online ? 'grayscale(0)' : 'grayscale(1)'}}>
 
                  <UserCircle size={20} className="icon" />
-                 <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
                     <span>{p.name} {!p.is_online ? '[🔴 掉线中]' : p.chips === 0 && p.is_active ? '(All-In)' : ''}</span>
+                    <span>💰 {p.chips} | 注: {p.current_bet}</span>
+                    <span style={{fontSize: '0.8rem', color:'var(--text-muted)'}}>
+                      ❤️ 剩余买入: {3 - p.revives_used}{gameState.phase === "WAITING" ? ` | ${p.is_ready ? '✅ 已准备' : '⏳ 未准备'}` : ''}
+                    </span>
+                  </div>
 
-                   <span>💰 {p.chips} | 注: {p.current_bet}</span>
-                   <span style={{fontSize: '0.8rem', color:'var(--text-muted)'}}>❤️ 剩余买入: {3 - p.revives_used}</span>
-                 </div>
                  {p.is_active || <span className="badge" style={{background: 'var(--danger)'}}>弃牌</span>}
                  {gameState.current_turn_index === gameState.players.indexOf(p) && !isWaitingOrShowdown && (
                    <span className="badge" style={{background: 'var(--accent)'}}>思考中</span>
@@ -634,18 +639,33 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
               <span style={{ color: 'var(--text-muted)' }}>筹码: <strong style={{ color: '#ffd700' }}>💰 {me.chips}</strong></span>
               <span style={{ color: 'var(--text-muted)' }}>本轮下注: <strong style={{ color: 'white' }}>💰 {me.current_bet}</strong></span>
               <span style={{ color: 'var(--text-muted)' }}>❤️ 剩余买入: <strong style={{ color: 'var(--accent)' }}>{3 - me.revives_used}</strong></span>
+              {gameState.phase === "WAITING" && <span style={{ color: me.is_ready ? '#4caf50' : 'var(--text-muted)' }}>{me.is_ready ? '✅ 你已准备' : '⏳ 你未准备'}</span>}
             </div>
 
             {gameState.phase === "WAITING" ? (
-              /* WAITING: 开局按钮 */
-              <div style={{ display: 'flex', justifyContent: 'center', padding: '1vh 2vw' }}>
-                <button 
-                  className="btn-start" 
-                  style={{ padding: '0.8vh 3vw', fontSize: 'clamp(0.85rem, 1.5vw, 1.1rem)', opacity: (gameState.players.filter(p => p.chips > 0).length < 2 || isSpectating || me.chips === 0) ? 0.5 : 1 }} 
-                  onClick={() => handleAction("start")}
-                  disabled={gameState.players.filter(p => p.chips > 0).length < 2 || isSpectating || me.chips === 0}
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px', padding: '1vh 2vw', flexWrap: 'wrap' }}>
+                <button
+                  className="btn-start"
+                  style={{ padding: '0.8vh 3vw', fontSize: 'clamp(0.85rem, 1.5vw, 1.1rem)', opacity: isSpectating || me.chips === 0 || me.is_ready ? 0.5 : 1 }}
+                  onClick={() => handleAction("ready")}
+                  disabled={isSpectating || me.chips === 0 || me.is_ready}
                 >
-                  <Play size={16} /> {gameState.players.filter(p => p.chips > 0).length < 2 ? "等待筹码充足的玩家..." : "🎲 新的一局"}
+                  <Play size={16} /> 准备
+                </button>
+                <button
+                  style={{ padding: '0.8vh 3vw', fontSize: 'clamp(0.85rem, 1.5vw, 1.1rem)', background: 'rgba(255,255,255,0.1)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '10px', opacity: isSpectating || me.chips === 0 || !me.is_ready ? 0.5 : 1, cursor: isSpectating || me.chips === 0 || !me.is_ready ? 'not-allowed' : 'pointer' }}
+                  onClick={() => handleAction("unready")}
+                  disabled={isSpectating || me.chips === 0 || !me.is_ready}
+                >
+                  取消准备
+                </button>
+                <button
+                  className="btn-start"
+                  style={{ padding: '0.8vh 3vw', fontSize: 'clamp(0.85rem, 1.5vw, 1.1rem)', opacity: allReady ? 1 : 0.5 }}
+                  onClick={() => handleAction("start")}
+                  disabled={!allReady}
+                >
+                  <Play size={16} /> {readyPlayers.length < 2 ? '等待筹码充足的玩家...' : allReady ? '🎲 开始发牌' : `等待全部准备 (${readyPlayers.filter(p => p.is_ready).length}/${readyPlayers.length})`}
                 </button>
               </div>
             ) : (
