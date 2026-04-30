@@ -483,8 +483,8 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
 
             <div style={{ display: 'flex', gap: '20px', justifyContent: 'center', marginTop: '10px' }}>
               {me && me.chips > 0 && (
-                <button className="btn-start" style={{ padding: '15px 40px', fontSize: '1.2rem', letterSpacing: '2px', boxShadow: '0 5px 15px rgba(76, 175, 80, 0.4)' }} onClick={() => handleAction("start")}>
-                  <Play size={20} /> 新的一局
+                <button className="btn-start" style={{ padding: '15px 40px', fontSize: '1.2rem', letterSpacing: '2px', boxShadow: '0 5px 15px rgba(76, 175, 80, 0.4)' }} onClick={() => handleAction(me.is_ready ? "unready" : "ready")}>
+                  <Play size={20} /> {me.is_ready ? '取消准备' : '准备下一局'}
                 </button>
               )}
               <button onClick={handleLeaveTable} style={{ padding: '15px 40px', fontSize: '1.2rem', background: 'transparent', border: '1px solid gray', color: 'gray', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>

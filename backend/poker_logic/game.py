@@ -102,16 +102,25 @@ class PokerEngine:
             
         if state.phase in (GamePhase.WAITING, GamePhase.SHOWDOWN):
             if action == "ready":
+                if state.phase == GamePhase.SHOWDOWN:
+                    state.phase = GamePhase.WAITING
+                    state.showdown_results = []
                 for p in state.players:
                     if p.id == player_id and p.chips > 0:
                         p.is_ready = True
                 return
             if action == "unready":
+                if state.phase == GamePhase.SHOWDOWN:
+                    state.phase = GamePhase.WAITING
+                    state.showdown_results = []
                 for p in state.players:
                     if p.id == player_id:
                         p.is_ready = False
                 return
             if action == "start":
+                if state.phase == GamePhase.SHOWDOWN:
+                    state.phase = GamePhase.WAITING
+                    state.showdown_results = []
                 ready_players = [p for p in state.players if p.chips > 0]
                 if len(ready_players) >= 2 and all(p.is_ready for p in ready_players):
                     PokerEngine._start_new_hand(state, deck)
