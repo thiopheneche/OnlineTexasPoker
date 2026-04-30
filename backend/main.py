@@ -1,6 +1,6 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from typing import List, Dict, Set
+from typing import List, Dict, Set, Any
 import json
 import uuid
 import math
@@ -63,28 +63,82 @@ manager = ConnectionManager()
 # --- Persistent Users Data ---
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 USERS_FILE = os.path.join(DATA_DIR, "users.json")
+ACCOUNT_TTL_SECONDS = 24 * 60 * 60
 
-def load_users() -> Dict[str, int]:
+def normalize_user_record(username: str, data: Any, now: float | None = None) -> Dict[str, Any]:
+    timestamp = now if now is not None else time.time()
+    if isinstance(data, dict):
+        chips = int(data.get("global_chips", 5))
+        last_login_at = float(data.get("last_login_at", timestamp))
+        return {"global_chips": chips, "last_login_at": last_login_at}
+    return {"global_chips": int(data), "last_login_at": timestamp}
+
+def load_users() -> Dict[str, Dict[str, Any]]:
     if not os.path.exists(DATA_DIR):
         os.makedirs(DATA_DIR)
     if os.path.exists(USERS_FILE):
         try:
             with open(USERS_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
+                raw_data = json.load(f)
+                now = time.time()
+                if isinstance(raw_data, dict):
+                    return {
+                        username: normalize_user_record(username, user_data, now)
+                        for username, user_data in raw_data.items()
+                    }
         except Exception:
             pass
     return {}
 
-def save_users(users_data: Dict[str, int]):
+def save_users(users_data: Dict[str, Dict[str, Any]]):
     if not os.path.exists(DATA_DIR):
         os.makedirs(DATA_DIR)
     with open(USERS_FILE, "w", encoding="utf-8") as f:
         json.dump(users_data, f, ensure_ascii=False, indent=2)
 
-user_global_chips: Dict[str, int] = load_users()
+user_accounts: Dict[str, Dict[str, Any]] = load_users()
 
-def save_chips():
-    save_users(user_global_chips)
+def save_accounts():
+    save_users(user_accounts)
+
+def purge_expired_accounts(now: float | None = None):
+    current_time = now if now is not None else time.time()
+    expired_usernames = [
+        username
+        for username, account in user_accounts.items()
+        if current_time - float(account.get("last_login_at", 0)) > ACCOUNT_TTL_SECONDS
+        and username not in active_users
+    ]
+    if not expired_usernames:
+        return
+    for username in expired_usernames:
+        user_accounts.pop(username, None)
+        disconnected_users.pop(username, None)
+    save_accounts()
+
+def ensure_account(username: str, now: float | None = None) -> Dict[str, Any]:
+    current_time = now if now is not None else time.time()
+    purge_expired_accounts(current_time)
+    account = user_accounts.get(username)
+    if account is None:
+        account = {"global_chips": 5, "last_login_at": current_time}
+        user_accounts[username] = account
+        save_accounts()
+    return account
+
+def update_last_login(username: str, now: float | None = None):
+    current_time = now if now is not None else time.time()
+    account = ensure_account(username, current_time)
+    account["last_login_at"] = current_time
+    save_accounts()
+
+def get_global_chips(username: str) -> int:
+    return int(user_accounts.get(username, {}).get("global_chips", 0))
+
+def set_global_chips(username: str, chips: int):
+    account = ensure_account(username)
+    account["global_chips"] = chips
+    save_accounts()
 
 active_users: Set[str] = set()
 disconnected_users: Dict[str, float] = {}
@@ -101,18 +155,18 @@ class LoginRequest(BaseModel):
 @app.post("/api/login")
 async def login(req: LoginRequest):
     now = time.time()
+    purge_expired_accounts(now)
     if req.username in active_users:
         return {"success": False, "error": "该 ID 当前已在线，请换一个名称"}
     
     if req.username in disconnected_users:
         if now - disconnected_users[req.username] < 60:
-            pass # Allowed to reconnect within 60s
+            pass
             
-    if req.username not in user_global_chips:
-        user_global_chips[req.username] = 5
-        save_chips()
+    account = ensure_account(req.username, now)
+    update_last_login(req.username, now)
         
-    return {"success": True, "global_chips": user_global_chips[req.username]}
+    return {"success": True, "global_chips": account["global_chips"]}
 
 @app.websocket("/ws/session/{username}")
 async def session_websocket(websocket: WebSocket, username: str):
@@ -121,9 +175,8 @@ async def session_websocket(websocket: WebSocket, username: str):
     if username in disconnected_users:
         del disconnected_users[username]
         
-    if username not in user_global_chips:
-        user_global_chips[username] = 5
-        save_chips()
+    ensure_account(username)
+    update_last_login(username)
         
     try:
         while True:
@@ -138,7 +191,8 @@ async def get_users():
 
 @app.get("/api/chips/{username}")
 async def get_chips(username: str):
-    return {"global_chips": user_global_chips.get(username, 0)}
+    purge_expired_accounts()
+    return {"global_chips": get_global_chips(username)}
 
 class JoinTableRequest(BaseModel):
     username: str
@@ -147,12 +201,12 @@ class JoinTableRequest(BaseModel):
 async def join_table(table_id: str, req: JoinTableRequest):
     if table_id not in tables:
         return {"success": False, "error": "该牌桌不存在"}
-    chips = user_global_chips.get(req.username, 0)
+    account = ensure_account(req.username)
+    chips = int(account["global_chips"])
     if chips < 1:
         return {"success": False, "error": "全局筹码不足！需要至少 1 枚全局筹码才能入座"}
-    user_global_chips[req.username] = chips - 1
-    save_chips()
-    return {"success": True, "global_chips": user_global_chips[req.username]}
+    set_global_chips(req.username, chips - 1)
+    return {"success": True, "global_chips": get_global_chips(req.username)}
 
 @app.get("/api/tables")
 async def get_tables():
@@ -168,11 +222,11 @@ async def get_tables():
 @app.post("/api/tables")
 async def create_table(req: CreateTableRequest):
     if req.username:
-        chips = user_global_chips.get(req.username, 0)
+        account = ensure_account(req.username)
+        chips = int(account["global_chips"])
         if chips < 1:
             return {"success": False, "error": "全局筹码不足！需要至少 1 枚全局筹码才能建桌"}
-        user_global_chips[req.username] = chips - 1
-        save_chips()
+        set_global_chips(req.username, chips - 1)
     
     tid = str(uuid.uuid4())[:8]
     tables[tid] = GameState(
@@ -182,7 +236,7 @@ async def create_table(req: CreateTableRequest):
         min_raise=req.big_blind
     )
     decks[tid] = Deck()
-    return {"success": True, "table_id": tid, "global_chips": user_global_chips.get(req.username, 0)}
+    return {"success": True, "table_id": tid, "global_chips": get_global_chips(req.username)}
 
 async def execute_leave_cleanup(table_id: str, client_id: str, cb):
     if table_id not in tables:
@@ -191,10 +245,11 @@ async def execute_leave_cleanup(table_id: str, client_id: str, cb):
     global_deck = decks[table_id]
     
     leaving_player = next((p for p in global_game_state.players if p.id == client_id), None)
-    if leaving_player and client_id in user_global_chips:
+    if leaving_player:
+        account = ensure_account(client_id)
         earned = math.floor(leaving_player.chips / 1000)
-        user_global_chips[client_id] += earned
-        save_chips()
+        account["global_chips"] = int(account["global_chips"]) + earned
+        save_accounts()
 
     if leaving_player:
         leaving_player.is_ready = False

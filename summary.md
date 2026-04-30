@@ -239,11 +239,12 @@ AntigravityTest/
 | 离开牌桌 | +floor(手中筹码 / 1000) 全局筹码 |
 | 商城购买 | 预留接口（尚未实现） |
 
-**存储方式**: 后端本地文件 `backend/data/users.json` + 运行时内存缓存 `user_global_chips: Dict[str, int]`
+**存储方式**: 后端本地文件 `backend/data/users.json` + 运行时内存缓存 `user_accounts: Dict[str, {global_chips, last_login_at}]`
 
 **附加机制**:
 - 登录 ID 会自动创建或读取本地持久化账号
 - 全局筹码在服务重启后仍可恢复
+- 每个账号都会记录最近登录时间；超过 24 小时未登录且当前不在线时自动注销
 - 断线 60 秒内支持原桌原状态重连，但是否回桌改为由大厅中的手动入口触发
 
 ---
@@ -366,6 +367,11 @@ AntigravityTest/
 19. ✅ 移除页面启动时基于浏览器缓存的自动登录；改为仅在用户手动输入 ID 登录后进入大厅
 20. ✅ 大厅仅在本地缓存牌桌仍存在时提供“继续刚才的牌桌”入口；缓存牌桌失效时自动清理，避免卡死
 21. ✅ 牌桌等待阶段增加准备机制，只有所有有筹码的玩家都已准备后才允许开始新一局
+22. ✅ 结算后改为先回到等待/准备状态，再由玩家准备开始下一局，避免直接开局卡住
+
+### 账号生命周期
+23. ✅ 记录每个账号最近登录时间；超过 24 小时未登录且当前不在线时自动注销账号
+24. ✅ 按用户要求清空服务器现有已注册账号数据
 
 ### 加注优化
 19. ✅ 加注增加自定义金额输入框（放在滑块旁边）
@@ -460,4 +466,6 @@ AntigravityTest/
 | 2026-04-29 | 修复2人桌大小盲注不轮换bug | `game.py`, `summary.md` |
 | 2026-04-30 | 修正前端离桌触发时机：仅显式点击离桌按钮才发送 `leave`，刷新/关闭页面走掉线保护 | `frontend/src/components/PokerTable.tsx`, `README.md`, `summary.md` |
 | 2026-04-30 | 移除自动静默登录，修复失效牌桌缓存卡死，并增加等待阶段准备机制 | `frontend/src/App.tsx`, `frontend/src/components/Lobby.tsx`, `frontend/src/components/PokerTable.tsx`, `backend/poker_logic/game.py`, `backend/poker_logic/game_state.py`, `README.md`, `summary.md` |
+| 2026-04-30 | 修复结算后新一局准备流程卡住问题 | `backend/poker_logic/game.py`, `frontend/src/components/PokerTable.tsx` |
+| 2026-04-30 | 增加账号24小时生命周期与最近登录时间记录，并按要求清空服务器用户数据 | `backend/main.py`, `README.md`, `summary.md` |
 | 2026-04-30 | 补充并修正服务器部署信息：项目路径 `/root/OnlineTexasPoker`、服务 `texas-poker`、静态目录 `/var/www/texas_poker/` 与完整部署流程 | `summary.md` |
