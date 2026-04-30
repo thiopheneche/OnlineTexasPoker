@@ -24,8 +24,9 @@ export const Lobby: React.FC<Props> = ({ onJoinTable, onLogout, username, global
   const [tables, setTables] = useState<TableInfo[]>([]);
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
-  const [smallBlind, setSmallBlind] = useState<number>(25);
-  const [bigBlind, setBigBlind] = useState<number>(50);
+  const [smallBlind, setSmallBlind] = useState<number>(5);
+  const [bigBlind, setBigBlind] = useState<number>(10);
+  const [buyIn, setBuyIn] = useState<number>(2000);
   const [chipError, setChipError] = useState<string>('');
   const reconnectTableId = localStorage.getItem(STORAGE_TABLE_KEY)?.trim() || '';
   const reconnectTableExists = reconnectTableId ? tables.some(table => table.table_id === reconnectTableId) : false;
@@ -82,7 +83,7 @@ export const Lobby: React.FC<Props> = ({ onJoinTable, onLogout, username, global
       const res = await fetch(`${API_BASE}/api/tables`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ small_blind: smallBlind, big_blind: bigBlind, username })
+        body: JSON.stringify({ small_blind: smallBlind, big_blind: bigBlind, buy_in: buyIn, username })
       });
       if (res.ok) {
         const data = await res.json();
@@ -139,13 +140,18 @@ export const Lobby: React.FC<Props> = ({ onJoinTable, onLogout, username, global
             <LogOut size={18} /> 退出登录
           </button>
         </div>
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', background: 'rgba(0,0,0,0.3)', padding: '5px 10px', borderRadius: '8px' }}>
-            <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>小盲/大盲:</span>
-            <input type="number" min="1" value={smallBlind} onChange={e => setSmallBlind(Number(e.target.value))} style={{ width: '50px', background:'transparent', color:'white', border:'1px solid rgba(255,255,255,0.2)', padding:'5px', borderRadius:'4px' }} />
-            <span style={{color: 'var(--text-muted)'}}>/</span>
-            <input type="number" min="2" value={bigBlind} onChange={e => setBigBlind(Number(e.target.value))} style={{ width: '50px', background:'transparent', color:'white', border:'1px solid rgba(255,255,255,0.2)', padding:'5px', borderRadius:'4px' }} />
-          </div>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', background: 'rgba(0,0,0,0.3)', padding: '5px 10px', borderRadius: '8px' }}>
+              <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>小盲/大盲:</span>
+              <input type="number" min="1" value={smallBlind} onChange={e => setSmallBlind(Number(e.target.value))} style={{ width: '50px', background:'transparent', color:'white', border:'1px solid rgba(255,255,255,0.2)', padding:'5px', borderRadius:'4px' }} />
+              <span style={{color: 'var(--text-muted)'}}>/</span>
+              <input type="number" min="2" value={bigBlind} onChange={e => setBigBlind(Number(e.target.value))} style={{ width: '50px', background:'transparent', color:'white', border:'1px solid rgba(255,255,255,0.2)', padding:'5px', borderRadius:'4px' }} />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', background: 'rgba(0,0,0,0.3)', padding: '5px 10px', borderRadius: '8px' }}>
+              <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>买入:</span>
+              <input type="number" min="100" step="100" value={buyIn} onChange={e => setBuyIn(Number(e.target.value))} style={{ width: '80px', background:'transparent', color:'white', border:'1px solid rgba(255,255,255,0.2)', padding:'5px', borderRadius:'4px' }} />
+            </div>
+
 
           <button onClick={fetchTables} className="btn-start" style={{ background: 'rgba(255,255,255,0.1)', color: '#fff' }}>
             <RefreshCcw size={18} className={loading ? 'animate-spin' : ''} /> 刷新
@@ -187,6 +193,7 @@ export const Lobby: React.FC<Props> = ({ onJoinTable, onLogout, username, global
             💡 <strong style={{color: 'var(--text-main)'}}>全局筹码机制</strong>：每位新玩家初始获得 <strong style={{color:'gold'}}>5💎</strong> 全局筹码。
             每次进入或创建牌桌消耗 <strong style={{color:'var(--danger)'}}>1💎</strong>。
             离开牌桌时，您手中的游戏筹码每满 <strong>1000</strong> 可兑换 <strong style={{color:'gold'}}>1💎</strong> 全局筹码（向下取整）。
+            当前新桌默认盲注为 <strong>5/10</strong>，默认买入为 <strong>2000</strong>，建桌时也可自定义。
           </p>
           {reconnectTableId && reconnectTableExists && (
             <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'center' }}>

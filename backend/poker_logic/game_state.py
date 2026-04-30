@@ -13,7 +13,7 @@ class GamePhase(str, Enum):
 class Player(BaseModel):
     id: str
     name: str
-    chips: int = 1000
+    chips: int = 2000
     current_bet: int = 0
     total_investment: int = 0
     is_active: bool = True
@@ -28,9 +28,10 @@ class GameState(BaseModel):
     phase: GamePhase = GamePhase.WAITING
     pot: int = 0
     current_highest_bet: int = 0
-    small_blind: int = 25
-    big_blind: int = 50
-    min_raise: int = 50
+    small_blind: int = 5
+    big_blind: int = 10
+    buy_in: int = 2000
+    min_raise: int = 10
     showdown_results: List[dict] = Field(default_factory=list)
     community_cards: List[str] = Field(default_factory=list)
     players: List[Player] = Field(default_factory=list)

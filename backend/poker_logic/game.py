@@ -67,7 +67,7 @@ class PokerEngine:
         if action == "revive":
             for p in state.players:
                 if p.id == player_id and p.chips == 0 and getattr(p, "revives_used", 0) < 3:
-                    p.chips = 1000
+                    p.chips = state.buy_in
                     p.revives_used += 1
             return
         

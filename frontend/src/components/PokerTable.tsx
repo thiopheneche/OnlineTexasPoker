@@ -29,6 +29,9 @@ export type GameState = {
   pot: number;
   current_highest_bet: number;
   min_raise: number;
+  small_blind: number;
+  big_blind: number;
+  buy_in: number;
   showdown_results: ShowdownResult[];
   community_cards: string[];
   players: Player[];
@@ -568,7 +571,7 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
 
         <section className="community-area">
           <h3>总底池: <span className="pot-amount">💰{gameState.pot}</span></h3>
-          <p style={{ margin:0, fontSize:'0.85rem', color:'var(--text-muted)'}}>最高下注: {gameState.current_highest_bet}</p>
+          <p style={{ margin:0, fontSize:'0.85rem', color:'var(--text-muted)'}}>盲注: {gameState.small_blind}/{gameState.big_blind} · 买入: {gameState.buy_in}</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center' }}>
             {showRunTwiceBoards ? (
               gameState.run_twice_boards.map((board, rowIdx) => (

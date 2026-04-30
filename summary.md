@@ -86,7 +86,7 @@ AntigravityTest/
 | GET | `/api/users` | 获取在线用户列表 | 无 | `{users: string[], count: number}` |
 | GET | `/api/chips/{username}` | 查询全局筹码余额 | 无 | `{global_chips: number}` |
 | GET | `/api/tables` | 获取所有牌桌列表 | 无 | `[{table_id, phase, player_count}]` |
-| POST | `/api/tables` | 创建新牌桌（扣1筹码） | `{small_blind, big_blind, username}` | `{success, table_id, global_chips}` |
+| POST | `/api/tables` | 创建新牌桌（扣1筹码） | `{small_blind, big_blind, buy_in, username}` | `{success, table_id, global_chips}` |
 | POST | `/api/tables/join/{table_id}` | 加入牌桌（扣1筹码） | `{username: string}` | `{success, error?, global_chips}` |
 
 ### 4.2 WebSocket 接口
@@ -135,8 +135,8 @@ AntigravityTest/
 ### 5.1 game_state.py - 数据模型
 
 - **GamePhase**: `WAITING → PREFLOP → FLOP → TURN → RIVER → SHOWDOWN`
-- **Player**: id, name, chips(初始1000), current_bet, total_investment, is_active, has_acted, revives_used(最多3次), hole_cards
-- **GameState**: table_id, phase, pot, current_highest_bet, small_blind(25), big_blind(50), min_raise, showdown_results, community_cards, players, button_index, current_turn_index
+- **Player**: id, name, chips(默认买入金额，初始2000), current_bet, total_investment, is_active, has_acted, revives_used(最多3次), hole_cards
+- **GameState**: table_id, phase, pot, current_highest_bet, small_blind(默认5), big_blind(默认10), buy_in(默认2000), min_raise, showdown_results, community_cards, players, button_index, current_turn_index
 
 ### 5.2 game.py - PokerEngine 引擎
 
@@ -189,6 +189,7 @@ AntigravityTest/
 **功能**：
 - 显示全局筹码余额（金色徽章）
 - 牌桌列表（每5秒刷新）+ 创建牌桌 + 加入牌桌
+- 建桌时可自定义小盲/大盲与买入金额（默认 5/10、2000）
 - 筹码不足时按钮禁用并显示错误提示
 - 在线玩家人数和ID列表（每5秒刷新）
 - 全局筹码经济规则说明
@@ -338,6 +339,7 @@ AntigravityTest/
 ### 牌桌管理
 4. ✅ 当牌桌上所有人都回到大厅，则自动注销当前牌桌
 5. ✅ 修改界面 UI，保证 Web 端所有按键在默认比例下正常展示
+6. ✅ 默认小盲/大盲调整为 5/10，并支持建桌时自定义买入金额（默认 2000）
 
 ### 网站身份
 6. ✅ 更新 README 的使用说明栏为网站超链接
@@ -372,6 +374,7 @@ AntigravityTest/
 ### 账号生命周期
 23. ✅ 记录每个账号最近登录时间；超过 24 小时未登录且当前不在线时自动注销账号
 24. ✅ 按用户要求清空服务器现有已注册账号数据
+25. ✅ 修复账号生命周期上线后导致后端无法启动的两处线上兼容/初始化问题：`active_users` 定义顺序错误，以及 Python 3.9 不支持 `| None` 类型注解
 
 ### 加注优化
 19. ✅ 加注增加自定义金额输入框（放在滑块旁边）
@@ -468,4 +471,6 @@ AntigravityTest/
 | 2026-04-30 | 移除自动静默登录，修复失效牌桌缓存卡死，并增加等待阶段准备机制 | `frontend/src/App.tsx`, `frontend/src/components/Lobby.tsx`, `frontend/src/components/PokerTable.tsx`, `backend/poker_logic/game.py`, `backend/poker_logic/game_state.py`, `README.md`, `summary.md` |
 | 2026-04-30 | 修复结算后新一局准备流程卡住问题 | `backend/poker_logic/game.py`, `frontend/src/components/PokerTable.tsx` |
 | 2026-04-30 | 增加账号24小时生命周期与最近登录时间记录，并按要求清空服务器用户数据 | `backend/main.py`, `README.md`, `summary.md` |
+| 2026-04-30 | 修复账号生命周期上线后导致后端无法启动的线上故障：调整 `active_users` 初始化顺序，并将 `| None` 类型注解改为 Python 3.9 兼容写法 | `backend/main.py`, `summary.md` |
+| 2026-04-30 | 调整默认盲注为 5/10，并支持建桌时自定义买入金额（默认 2000） | `backend/main.py`, `backend/poker_logic/game.py`, `backend/poker_logic/game_state.py`, `frontend/src/components/Lobby.tsx`, `frontend/src/components/PokerTable.tsx`, `README.md`, `summary.md` |
 | 2026-04-30 | 补充并修正服务器部署信息：项目路径 `/root/OnlineTexasPoker`、服务 `texas-poker`、静态目录 `/var/www/texas_poker/` 与完整部署流程 | `summary.md` |
