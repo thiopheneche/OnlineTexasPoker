@@ -474,3 +474,4 @@ AntigravityTest/
 | 2026-04-30 | 修复账号生命周期上线后导致后端无法启动的线上故障：调整 `active_users` 初始化顺序，并将 `| None` 类型注解改为 Python 3.9 兼容写法 | `backend/main.py`, `summary.md` |
 | 2026-04-30 | 调整默认盲注为 5/10，并支持建桌时自定义买入金额（默认 2000） | `backend/main.py`, `backend/poker_logic/game.py`, `backend/poker_logic/game_state.py`, `frontend/src/components/Lobby.tsx`, `frontend/src/components/PokerTable.tsx`, `README.md`, `summary.md` |
 | 2026-04-30 | 补充并修正服务器部署信息：项目路径 `/root/OnlineTexasPoker`、服务 `texas-poker`、静态目录 `/var/www/texas_poker/` 与完整部署流程 | `summary.md` |
+| 2026-05-02 | 修复手机端浏览器底部截断的 UI 布局问题，将 `100vh` 优化为 `100dvh` (包含兼容回退方案) | `frontend/src/index.css`, `summary.md` |
