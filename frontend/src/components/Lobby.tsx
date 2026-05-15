@@ -2,8 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { PlusCircle, LogIn, RefreshCcw, Users, Gem, LogOut } from 'lucide-react';
 import { DisclaimerModal } from './Disclaimer';
 import { TutorialModal } from './Tutorial';
+import { API_BASE } from '../config';
 
-const API_BASE = 'https://texaspoker.thiopheneche.dpdns.org';
 const STORAGE_TABLE_KEY = 'poker_table_id';
 
 type TableInfo = {
@@ -122,7 +122,7 @@ export const Lobby: React.FC<Props> = ({ onJoinTable, onLogout, username, global
   };
 
   return (
-    <div className="poker-table-container pb-10" style={{ padding: '40px', display: 'flex', flexDirection: 'column' }}>
+    <div className="poker-table-container lobby-screen pb-10" style={{ padding: '40px', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 20px', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }}>
           <h1 style={{ color: 'var(--primary)', margin: 0 }}>💎 扑克大厅</h1>
@@ -192,7 +192,7 @@ export const Lobby: React.FC<Props> = ({ onJoinTable, onLogout, username, global
           <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.85rem', lineHeight: '1.6' }}>
             💡 <strong style={{color: 'var(--text-main)'}}>全局筹码机制</strong>：每位新玩家初始获得 <strong style={{color:'gold'}}>5💎</strong> 全局筹码。
             每次进入或创建牌桌消耗 <strong style={{color:'var(--danger)'}}>1💎</strong>。
-            离开牌桌时，您手中的游戏筹码每满 <strong>1000</strong> 可兑换 <strong style={{color:'gold'}}>1💎</strong> 全局筹码（向下取整）。
+            离开牌桌时，您手中的游戏筹码每满当前牌桌买入额可兑换 <strong style={{color:'gold'}}>1💎</strong> 全局筹码（当前建桌买入额：<strong>{buyIn}</strong>，向下取整）。
             当前新桌默认盲注为 <strong>5/10</strong>，默认买入为 <strong>2000</strong>，建桌时也可自定义。
           </p>
           {reconnectTableId && reconnectTableExists && (

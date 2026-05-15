@@ -202,6 +202,8 @@ class JoinTableRequest(BaseModel):
 async def join_table(table_id: str, req: JoinTableRequest):
     if table_id not in tables:
         return {"success": False, "error": "该牌桌不存在"}
+    if any(p.id == req.username for p in tables[table_id].players):
+        return {"success": True, "global_chips": get_global_chips(req.username)}
     account = ensure_account(req.username)
     chips = int(account["global_chips"])
     if chips < 1:
@@ -249,7 +251,8 @@ async def execute_leave_cleanup(table_id: str, client_id: str, cb):
     leaving_player = next((p for p in global_game_state.players if p.id == client_id), None)
     if leaving_player:
         account = ensure_account(client_id)
-        earned = math.floor(leaving_player.chips / 1000)
+        buy_in_unit = max(1, int(global_game_state.buy_in))
+        earned = math.floor(leaving_player.chips / buy_in_unit)
         account["global_chips"] = int(account["global_chips"]) + earned
         save_accounts()
 

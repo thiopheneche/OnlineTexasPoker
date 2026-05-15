@@ -3,8 +3,8 @@ import { PokerTable } from './components/PokerTable';
 import { Lobby } from './components/Lobby';
 import { DisclaimerModal } from './components/Disclaimer';
 import { TutorialModal } from './components/Tutorial';
+import { API_BASE, sessionWsUrl } from './config';
 
-const API_BASE = 'https://texaspoker.thiopheneche.dpdns.org';
 const STORAGE_USERNAME_KEY = 'poker_username';
 const STORAGE_TABLE_KEY = 'poker_table_id';
 
@@ -37,7 +37,7 @@ function App() {
 
   useEffect(() => {
     if (!username) return;
-    const sessionWs = new WebSocket(`${API_BASE.replace('https', 'wss')}/ws/session/${username}`);
+    const sessionWs = new WebSocket(sessionWsUrl(username));
     const heartbeat = setInterval(() => {
       if (sessionWs.readyState === WebSocket.OPEN) {
         sessionWs.send('ping');
@@ -106,7 +106,7 @@ function App() {
   if (!username) {
     return (
       <div className="app-main flex-center" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ background: '#1a1a1a', padding: '50px', borderRadius: '20px', border: '2px solid var(--accent)', textAlign: 'center', width: '450px', boxShadow: '0px 10px 40px rgba(0,0,0,0.5)' }}>
+        <div className="login-card" style={{ background: '#1a1a1a', padding: '50px', borderRadius: '20px', border: '2px solid var(--accent)', textAlign: 'center', width: '450px', boxShadow: '0px 10px 40px rgba(0,0,0,0.5)' }}>
           <h1 style={{ color: 'var(--accent)', marginBottom: '10px', fontSize: '2.5rem' }}>♠️ 德州扑克 ♣️</h1>
           <p style={{ color: 'var(--text-muted)', marginBottom: '30px' }}>请输入您的唯一游戏 ID 以进入大厅</p>
           <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>

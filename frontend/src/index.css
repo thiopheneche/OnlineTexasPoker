@@ -367,10 +367,27 @@ html, body {
   transform: translateY(-2px);
 }
 
+.player-panel,
+.hole-card-row,
+.player-stats-row,
+.waiting-actions-row,
+.primary-actions-row,
+.raise-actions-row {
+  min-width: 0;
+}
+
+.modal-overlay {
+  padding: 16px;
+}
+
+.modal-card {
+  width: min(100%, 560px);
+}
+
 /* Mobile specific adjustments */
 @media (max-height: 700px) {
   .header { padding: 4px 10px; }
-  .game-board { padding: 6px 10px; }
+  .game-board { padding: 6px 10px; overflow-y: auto; }
   .my-area { padding: 6px 10px; }
   .opponents { gap: 4px; }
   .community-area { gap: 4px; }
@@ -379,13 +396,190 @@ html, body {
 }
 
 @media (max-width: 600px) {
-  .poker-table-container { width: 100%; height: 100vh; height: 100dvh; border-radius: 0; }
-  .header { padding: 6px 10px; }
-  .header h1 { font-size: 0.9rem; }
-  .game-board { padding: 8px; }
+  .app-main,
+  .flex-center {
+    align-items: stretch;
+    justify-content: flex-start;
+  }
+
+  .login-card {
+    width: calc(100vw - 24px) !important;
+    padding: 28px 18px !important;
+    border-radius: 14px !important;
+    margin: auto 12px;
+  }
+
+  .login-card h1 {
+    font-size: 1.8rem !important;
+  }
+
+  .poker-table-container {
+    width: 100%;
+    max-width: none;
+    height: 100vh;
+    height: 100dvh;
+    border-radius: 0;
+  }
+
+  .lobby-screen {
+    padding: 16px 10px !important;
+    overflow-y: auto;
+  }
+
+  .poker-table-screen {
+    box-shadow: none;
+  }
+
+  .header {
+    padding: 6px 8px;
+    gap: 8px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .table-title-bar {
+    gap: 8px !important;
+    min-width: 0;
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+  }
+
+  .header h1 {
+    font-size: 0.9rem;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .turn-indicator {
+    width: 100%;
+  }
+
+  .turn-indicator .active-turn,
+  .turn-indicator .waiting {
+    display: block;
+    width: 100%;
+    padding: 4px 8px;
+    font-size: 0.75rem;
+    text-align: center;
+  }
+
+  .game-board {
+    padding: 8px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    gap: 8px;
+  }
+
   .my-area { padding: 8px; flex-wrap: wrap; gap: 6px; }
-  .opponents { gap: 4px; }
-  .opponent-card { padding: 4px 8px; font-size: 0.75rem; }
-  .card { width: 42px; height: 60px; font-size: 1.1rem; }
-  .actions button { padding: 6px 8px; font-size: 0.75rem; }
+  .opponents {
+    gap: 4px;
+    max-height: 27dvh;
+    overflow-y: auto;
+    justify-content: stretch;
+  }
+  .opponent-card {
+    padding: 4px 8px;
+    font-size: 0.72rem;
+    flex: 1 1 145px;
+    min-width: 0;
+  }
+  .opponent-card .icon {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+  }
+  .community-area {
+    flex: 0 0 auto;
+    justify-content: flex-start;
+    gap: 6px;
+  }
+  .cards-row {
+    max-width: 100%;
+    gap: 4px;
+    justify-content: center;
+    flex-wrap: nowrap;
+  }
+  .card {
+    width: clamp(36px, 17vw, 48px);
+    height: clamp(52px, 23vw, 68px);
+    font-size: clamp(0.95rem, 5vw, 1.25rem);
+    border-radius: 6px;
+    flex: 0 0 auto;
+  }
+  .card.empty {
+    width: min(220px, 72vw);
+    height: 52px;
+  }
+  .player-panel {
+    border-radius: 10px;
+    overflow: visible;
+  }
+  .hole-card-row,
+  .player-stats-row,
+  .waiting-actions-row,
+  .primary-actions-row,
+  .raise-actions-row {
+    padding: 6px 8px !important;
+  }
+  .hole-card-row,
+  .player-stats-row {
+    flex-wrap: wrap;
+    gap: 6px !important;
+  }
+  .player-stats-row {
+    justify-content: space-around !important;
+  }
+  .primary-actions-row {
+    gap: 8px !important;
+  }
+  .primary-actions-row button {
+    max-width: none !important;
+    min-width: 0;
+  }
+  .raise-actions-row {
+    gap: 5px !important;
+  }
+  .raise-actions-row input {
+    width: 64px !important;
+  }
+  .actions button,
+  .player-panel button {
+    padding: 6px 8px;
+    font-size: 0.75rem;
+  }
+  .chat-toggle-button {
+    right: 12px !important;
+    bottom: 88px !important;
+    width: 44px !important;
+    height: 44px !important;
+  }
+  .chat-panel {
+    right: 8px !important;
+    left: 8px !important;
+    bottom: 140px !important;
+    width: auto !important;
+    height: min(360px, calc(100dvh - 190px)) !important;
+    border-radius: 12px !important;
+  }
+  .modal-overlay {
+    padding: 12px !important;
+    align-items: flex-start !important;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .modal-card {
+    min-width: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: calc(100dvh - 24px) !important;
+    overflow-y: auto;
+    padding: 22px 16px !important;
+    border-radius: 14px !important;
+  }
+  .modal-card h1 {
+    font-size: 1.7rem !important;
+  }
 }

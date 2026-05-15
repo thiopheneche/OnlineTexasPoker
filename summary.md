@@ -1,6 +1,6 @@
 # OnlineTexasPoker 项目总结文档
 
-> **最后更新时间**: 2026-04-30  
+> **最后更新时间**: 2026-05-15  
 > **部署地址**: https://texaspoker.thiopheneche.dpdns.org  
 > **GitHub**: https://github.com/thiopheneche/OnlineTexasPoker (分支: `online-edition`)  
 > **本文档用途**: 记录项目全部需求、代码结构、接口定义、部署流程和实现细节，方便与新 Agent 交付
@@ -63,6 +63,7 @@ AntigravityTest/
     └── src/
         ├── main.tsx            # React 入口
         ├── App.tsx             # 根组件（登录 / 路由 / 全局筹码状态）
+        ├── config.ts           # API / WebSocket 连接配置（本地默认 localhost，线上默认同源，可用 Vite 环境变量覆盖）
         ├── App.css             # App 级别样式（登录页）
         ├── index.css           # 全局样式（响应式布局、牌桌主题）
         └── components/
@@ -87,7 +88,7 @@ AntigravityTest/
 | GET | `/api/chips/{username}` | 查询全局筹码余额 | 无 | `{global_chips: number}` |
 | GET | `/api/tables` | 获取所有牌桌列表 | 无 | `[{table_id, phase, player_count}]` |
 | POST | `/api/tables` | 创建新牌桌（扣1筹码） | `{small_blind, big_blind, buy_in, username}` | `{success, table_id, global_chips}` |
-| POST | `/api/tables/join/{table_id}` | 加入牌桌（扣1筹码） | `{username: string}` | `{success, error?, global_chips}` |
+| POST | `/api/tables/join/{table_id}` | 加入牌桌（扣1筹码；若玩家已在该牌桌中则不重复扣除） | `{username: string}` | `{success, error?, global_chips}` |
 
 ### 4.2 WebSocket 接口
 
@@ -155,7 +156,7 @@ AntigravityTest/
 ### 5.3 特殊机制
 
 - **弃牌获胜亮牌选择**: 弃牌赢时，赢家底牌默认隐藏（`hole_cards`清空，原牌保存在`_saved_hole_cards`）。赢家可发送`show_cards`/`hide_cards`选择是否向全桌展示
-- **复活系统**: 破产后可买入1000筹码复活，每人最多3次（`revives_used`）
+- **复活系统**: 破产后按当前牌桌 `buy_in` 重新买入复活，每人最多3次（`revives_used`）
 - **未注资返还**: 当单人加注但无人跟到同等额度时，多出部分自动退回
 
 ### 5.4 evaluator.py - 牌型评估
@@ -182,6 +183,7 @@ AntigravityTest/
 - 登录成功后仍会保留最近一次用户名到 `localStorage`，并在进入牌桌时记录最近牌桌 ID 供手动续回使用
 - 每次从牌桌返回大厅时自动调用 `/api/chips/{username}` 刷新筹码
 - 根据 `currentTableId` 切换渲染 `<Lobby>` 或 `<PokerTable>`
+- 前端连接地址统一由 `src/config.ts` 管理：本地开发默认连接 `http://localhost:8000` / `ws://localhost:8000`，线上默认使用当前域名同源 `/api` 与 `/ws`，也可通过 `VITE_API_BASE`、`VITE_WS_BASE` 覆盖
 - 登录页提供网站使用教程入口
 
 ### 6.2 Lobby.tsx - 大厅组件
@@ -212,7 +214,7 @@ AntigravityTest/
 | Row 2 | 筹码余额 + 本轮下注 + 剩余买入次数 + 等待区准备状态 |
 | Row 3 | 等待阶段显示准备/取消准备/开始发牌；对局阶段显示弃牌 + 过牌/跟注 |
 | Row 4 | 预设加注(最小/2x/3x/½底池/满底池) + 手动输入 + 加注确认 + ALL-IN |
-| 聊天 | 右下角浮动按钮 + 滑出聊天面板（未读计数/Enter发送/100条缓存） |
+| 聊天 | 右下角浮动按钮 + 滑出聊天面板（未读计数/Enter发送/100条缓存；开关聊天面板不再重连牌桌 WebSocket） |
 
 **弹窗**：
 - 破产弹窗（60秒倒计时 + 复活/观战/离桌选项）
@@ -237,7 +239,7 @@ AntigravityTest/
 | 首次登录 | +5 全局筹码 |
 | 创建牌桌 | -1 全局筹码 |
 | 加入牌桌 | -1 全局筹码 |
-| 离开牌桌 | +floor(手中筹码 / 1000) 全局筹码 |
+| 离开牌桌 | +floor(手中筹码 / 当前牌桌买入额) 全局筹码 |
 | 商城购买 | 预留接口（尚未实现） |
 
 **存储方式**: 后端本地文件 `backend/data/users.json` + 运行时内存缓存 `user_accounts: Dict[str, {global_chips, last_login_at}]`
@@ -247,6 +249,7 @@ AntigravityTest/
 - 全局筹码在服务重启后仍可恢复
 - 每个账号都会记录最近登录时间；超过 24 小时未登录且当前不在线时自动注销
 - 断线 60 秒内支持原桌原状态重连，但是否回桌改为由大厅中的手动入口触发
+- 已在同一牌桌中的玩家再次通过加入接口续回时，不重复扣除全局筹码
 
 ---
 
@@ -259,6 +262,9 @@ AntigravityTest/
 - 扑克牌大小: `clamp(45px, 7vw, 90px)` × `clamp(65px, 10vw, 130px)`
 - `@media (max-height: 700px)` - 矮屏适配
 - `@media (max-width: 600px)` - 手机窄屏适配
+- 手机端牌桌主体允许纵向内部滚动并禁止横向溢出，避免浏览器地址栏、动态视口或底部操作区导致内容被截断
+- 聊天面板、破产/发两次/结算/终局弹窗在手机端使用 `max-height`、`overflow-y:auto` 与 `min-width:0` 约束，避免固定宽度弹窗撑破屏幕
+- 登录页和大厅页在手机端使用独立的 `.login-card`、`.lobby-screen` 约束，保证入口页面不横向溢出
 
 ---
 
@@ -354,7 +360,7 @@ AntigravityTest/
 11. ✅ 聊天框生命周期与牌桌绑定，牌桌销毁时聊天一并清除
 
 ### 经济系统
-12. ✅ 全局筹码系统（初始5枚，进桌/建桌扣1枚，离桌按 floor(chips/1000) 奖励）
+12. ✅ 全局筹码系统（初始5枚，进桌/建桌扣1枚，离桌按 floor(chips/当前牌桌买入额) 奖励）
 13. ✅ 全局筹码本地持久化（保存到 `backend/data/users.json`，服务重启后恢复）
 14. ⬜ 商城系统（预留接口，未实现）
 
@@ -385,6 +391,7 @@ AntigravityTest/
 ### 响应式适配
 17. ✅ 手机端无法查看底部按钮的问题修复
 18. ✅ 全部内容固定在一屏内，根据浏览器窗口大小自动调整
+19. ✅ 手机端牌桌主体允许内部滚动，弹窗/聊天面板/登录卡片/大厅布局增加宽高约束，避免动态浏览器 UI 导致内容被截断
 
 ### UI 布局重构
 19. ✅ 底部操作区改为四排布局（底牌 / 筹码信息 / 弃牌跟注 / 加注ALL-IN）
@@ -421,6 +428,9 @@ AntigravityTest/
 
 ### Bug修复
 30. ✅ 修复2人桌大小盲注不轮换的问题（button_index改为基于state.players而非actual_players循环）
+31. ✅ 修复全局筹码离桌兑换没有随牌桌买入额变化的问题，并避免同一玩家续回同一牌桌时重复扣除入桌全局筹码
+32. ✅ 修复前端本地开发默认连接线上服务的问题，将 API / WebSocket 地址集中到 `config.ts`
+33. ✅ 修复聊天面板开关导致牌桌 WebSocket 重连的问题
 
 ---
 
@@ -475,3 +485,7 @@ AntigravityTest/
 | 2026-04-30 | 调整默认盲注为 5/10，并支持建桌时自定义买入金额（默认 2000） | `backend/main.py`, `backend/poker_logic/game.py`, `backend/poker_logic/game_state.py`, `frontend/src/components/Lobby.tsx`, `frontend/src/components/PokerTable.tsx`, `README.md`, `summary.md` |
 | 2026-04-30 | 补充并修正服务器部署信息：项目路径 `/root/OnlineTexasPoker`、服务 `texas-poker`、静态目录 `/var/www/texas_poker/` 与完整部署流程 | `summary.md` |
 | 2026-05-02 | 修复手机端浏览器底部截断的 UI 布局问题，将 `100vh` 优化为 `100dvh` (包含兼容回退方案) | `frontend/src/index.css`, `summary.md` |
+| 2026-05-15 | 修正全局筹码离桌兑换规则为按当前牌桌买入额计算，并避免续回同一牌桌重复扣除入桌筹码 | `backend/main.py`, `frontend/src/components/Lobby.tsx`, `frontend/src/components/PokerTable.tsx`, `README.md`, `summary.md` |
+| 2026-05-15 | 增加前端 API / WebSocket 集中配置，修复本地开发写死线上域名与聊天面板开关导致牌桌 WebSocket 重连的问题 | `frontend/src/config.ts`, `frontend/src/vite-env.d.ts`, `frontend/src/App.tsx`, `frontend/src/components/Lobby.tsx`, `frontend/src/components/PokerTable.tsx`, `summary.md` |
+| 2026-05-15 | 加强手机端 UI 防截断方案：牌桌内部滚动、弹窗与聊天面板移动端宽高约束、登录页和大厅移动端约束 | `frontend/src/index.css`, `frontend/src/App.tsx`, `frontend/src/components/Lobby.tsx`, `frontend/src/components/PokerTable.tsx`, `summary.md` |
+| 2026-05-15 | 按部署流程推送 `online-edition` 并更新 VPS：拉取代码、重启 `texas-poker`、重新构建前端并覆盖 `/var/www/texas_poker/` | `summary.md`, `README.md`, `backend/main.py`, `frontend/src/*` |

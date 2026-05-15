@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Coins, Play, UserCircle, LogOut, Check, ArrowUpCircle, XCircle, MessageSquare, Send } from 'lucide-react';
 import { TutorialModal } from './Tutorial';
+import { tableWsUrl } from '../config';
 
 export type Player = {
   id: string;
@@ -70,18 +71,23 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
   const ws = useRef<WebSocket | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const leavingRef = useRef(false);
+  const chatOpenRef = useRef(false);
+
+  useEffect(() => {
+    chatOpenRef.current = chatOpen;
+  }, [chatOpen]);
 
   useEffect(() => {
     localStorage.setItem('poker_table_id', tableId);
     leavingRef.current = false;
-    ws.current = new WebSocket(`wss://texaspoker.thiopheneche.dpdns.org/ws/${tableId}/${clientId}`);
+    ws.current = new WebSocket(tableWsUrl(tableId, clientId));
     ws.current.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
         if (data.type === 'chat') {
           const msg: ChatMessage = { sender: data.sender, message: data.message, timestamp: Date.now() };
           setChatMessages(prev => [...prev.slice(-99), msg]);
-          if (!chatOpen) {
+          if (!chatOpenRef.current) {
             setUnreadCount(prev => prev + 1);
           }
         } else {
@@ -99,7 +105,7 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
       }
       socket?.close();
     };
-  }, [tableId, clientId, chatOpen]);
+  }, [tableId, clientId]);
 
   // Auto-scroll chat to bottom
   useEffect(() => {
@@ -107,7 +113,7 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
   }, [chatMessages]);
 
   const handleAction = (action: string, amount: number = 0) => {
-      ws.current?.send(JSON.stringify({ action, amount }));
+    ws.current?.send(JSON.stringify({ action, amount }));
   };
 
   const handleChatToggle = () => {
@@ -172,7 +178,7 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
   const me = gameState?.players.find(p => p.id === clientId);
   const currentTurnPlayer = gameState?.players[gameState.current_turn_index] || null;
   const derivedRaiseAmount = gameState ? gameState.current_highest_bet + gameState.min_raise : 0;
-  
+
   const isBankrupt = me && me.chips === 0 && (gameState?.phase === "WAITING" || gameState?.phase === "SHOWDOWN");
   const shouldShowBankruptModal = Boolean(isBankrupt && !isSpectating);
   const shouldShowVictory = Boolean(gameState && me && me.chips > 0 && gameState.players.length >= 2 && gameState.players.filter(p => p.id !== clientId).every(p => p.chips === 0 && p.revives_used >= 3 && ((gameState.phase === "WAITING" || gameState.phase === "SHOWDOWN") || !p.is_active)) && !victoryDismissed);
@@ -190,15 +196,15 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
   }, [shouldShowBankruptModal]);
 
   useEffect(() => {
-      if (bankruptTimer === null) return;
-      if (bankruptTimer <= 0) {
-          handleLeaveTable();
-          return;
-      }
-      const interval = setInterval(() => {
-          setBankruptTimer(prev => prev !== null ? prev - 1 : null);
-      }, 1000);
-      return () => clearInterval(interval);
+    if (bankruptTimer === null) return;
+    if (bankruptTimer <= 0) {
+      handleLeaveTable();
+      return;
+    }
+    const interval = setInterval(() => {
+      setBankruptTimer(prev => prev !== null ? prev - 1 : null);
+    }, 1000);
+    return () => clearInterval(interval);
   }, [bankruptTimer, handleLeaveTable]);
 
   if (!gameState) {
@@ -225,13 +231,14 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
   };
 
   return (
-    <div className="poker-table-container" style={{ position: 'relative' }}>
+    <div className="poker-table-container poker-table-screen" style={{ position: 'relative' }}>
 
       {/* ===== 聊天浮动按钮 ===== */}
-        <button 
-          onClick={handleChatToggle} 
+      <button
+        className="chat-toggle-button"
+        onClick={handleChatToggle}
 
-        style={{ 
+        style={{
           position: 'fixed', bottom: '160px', right: '30px', zIndex: 9999,
           width: '50px', height: '50px', borderRadius: '50%', border: 'none',
           background: chatOpen ? 'var(--accent)' : 'var(--primary)', color: '#000',
@@ -253,7 +260,7 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
 
       {/* ===== 聊天面板 ===== */}
       {chatOpen && (
-        <div style={{
+        <div className="chat-panel" style={{
           position: 'fixed', bottom: '220px', right: '30px', zIndex: 9998,
           width: '320px', height: '360px', background: 'rgba(20,20,20,0.95)',
           borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)',
@@ -322,31 +329,31 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
           </div>
         </div>
       )}
-      
-      {/* 破产复活弹窗 */}
-       {shouldShowBankruptModal && me && (
 
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: '#1a1a1a', padding: '40px', borderRadius: '20px', border: '2px solid var(--danger)', textAlign: 'center', width: '400px' }}>
+      {/* 破产复活弹窗 */}
+      {shouldShowBankruptModal && me && (
+
+        <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="modal-card bankrupt-modal-card" style={{ background: '#1a1a1a', padding: '40px', borderRadius: '20px', border: '2px solid var(--danger)', textAlign: 'center', width: '400px' }}>
             <h1 style={{ color: 'var(--danger)', marginBottom: '10px' }}>💔 您已破产</h1>
             <p style={{ color: 'var(--text-muted)', marginBottom: '30px' }}>
-              距离自动退出还有 <span style={{color: 'white', fontWeight: 'bold', fontSize: '1.2rem'}}>{bankruptTimer}</span> 秒
+              距离自动退出还有 <span style={{ color: 'white', fontWeight: 'bold', fontSize: '1.2rem' }}>{bankruptTimer}</span> 秒
             </p>
             {me.revives_used < 3 ? (
-               <button onClick={() => handleAction("revive")} style={{ width: '100%', padding: '15px', background: '#4caf50', color: 'white', border: 'none', borderRadius: '10px', fontSize: '1.2rem', cursor: 'pointer', marginBottom: '10px'}}>
-                 🌟 立刻复活 (买入 1000)<br/><span style={{fontSize: '0.9rem', opacity: 0.8}}>剩余复活次数: {3 - me.revives_used} / 3</span>
-               </button>
+              <button onClick={() => handleAction("revive")} style={{ width: '100%', padding: '15px', background: '#4caf50', color: 'white', border: 'none', borderRadius: '10px', fontSize: '1.2rem', cursor: 'pointer', marginBottom: '10px' }}>
+                🌟 立刻复活 (买入 {gameState.buy_in})<br /><span style={{ fontSize: '0.9rem', opacity: 0.8 }}>剩余复活次数: {3 - me.revives_used} / 3</span>
+              </button>
             ) : (
-               <div style={{ padding: '20px', background: '#333', borderRadius: '10px', color: 'gray', marginBottom: '10px'}}>
-                 ❌ 复活次数已耗尽，您已被淘汰。
-               </div>
+              <div style={{ padding: '20px', background: '#333', borderRadius: '10px', color: 'gray', marginBottom: '10px' }}>
+                ❌ 复活次数已耗尽，您已被淘汰。
+              </div>
             )}
             {me.revives_used >= 3 && (
-               <button onClick={() => setIsSpectating(true)} style={{ width: '100%', padding: '15px', background: '#2196f3', color: 'white', border: 'none', borderRadius: '10px', fontSize: '1rem', cursor: 'pointer', marginBottom: '10px'}}>
-                 👁️ 留在本桌观战
-               </button>
+              <button onClick={() => setIsSpectating(true)} style={{ width: '100%', padding: '15px', background: '#2196f3', color: 'white', border: 'none', borderRadius: '10px', fontSize: '1rem', cursor: 'pointer', marginBottom: '10px' }}>
+                👁️ 留在本桌观战
+              </button>
             )}
-               <button onClick={handleLeaveTable} style={{ width: '100%', padding: '15px', background: 'transparent', border: '1px solid gray', color: 'gray', borderRadius: '10px', fontSize: '1rem', cursor: 'pointer'}}>
+            <button onClick={handleLeaveTable} style={{ width: '100%', padding: '15px', background: 'transparent', border: '1px solid gray', color: 'gray', borderRadius: '10px', fontSize: '1rem', cursor: 'pointer' }}>
 
               逃离牌局并返回大厅
             </button>
@@ -356,8 +363,8 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
 
       {/* 发两次决定弹窗 */}
       {gameState && gameState.awaiting_run_twice && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: 'linear-gradient(135deg, #1a1a2e, #16213e)', padding: '40px', borderRadius: '20px', border: '2px solid var(--accent)', textAlign: 'center', minWidth: '400px', maxWidth: '550px', boxShadow: '0 10px 40px rgba(3,218,198,0.3)' }}>
+        <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="modal-card run-twice-modal-card" style={{ background: 'linear-gradient(135deg, #1a1a2e, #16213e)', padding: '40px', borderRadius: '20px', border: '2px solid var(--accent)', textAlign: 'center', minWidth: '400px', maxWidth: '550px', boxShadow: '0 10px 40px rgba(3,218,198,0.3)' }}>
             <h1 style={{ color: 'var(--accent)', margin: '0 0 15px 0', fontSize: '2rem' }}>🃏 发牌次数选择 🃏</h1>
             <p style={{ color: 'var(--text-muted)', marginBottom: '10px', fontSize: '0.95rem' }}>当前底池: <strong style={{ color: '#ffd700' }}>💰 {gameState.pot}</strong></p>
             {gameState.first_allin_player_id === clientId ? (
@@ -387,8 +394,8 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
 
       {/* 结算弹窗 */}
       {showSettlement && (!isBankrupt || isSpectating) && !shouldShowVictory && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: '#111', padding: '40px', borderRadius: '20px', border: '2px solid gold', textAlign: 'center', minWidth: '500px', boxShadow: '0 10px 40px rgba(255, 215, 0, 0.2)', maxHeight: '90vh', overflowY: 'auto' }}>
+        <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="modal-card settlement-modal-card" style={{ background: '#111', padding: '40px', borderRadius: '20px', border: '2px solid gold', textAlign: 'center', minWidth: '500px', boxShadow: '0 10px 40px rgba(255, 215, 0, 0.2)', maxHeight: '90vh', overflowY: 'auto' }}>
             <h1 style={{ color: 'gold', margin: '0 0 30px 0', fontSize: '2.5rem', textShadow: '0 2px 10px rgba(255, 215, 0, 0.3)' }}>🏆 巅峰决战 🏆</h1>
 
             {/* 发两次的双板展示 */}
@@ -427,7 +434,7 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
                 <div style={{ marginBottom: '30px' }}>
                   {gameState.showdown_results.map((r, idx) => (
                     <div key={idx} style={{ marginBottom: '15px', fontSize: '1.4rem' }}>
-                      赢家 <strong style={{ color: 'var(--accent)' }}>{r.name}</strong> 依靠 <span style={{color:'white', fontWeight:'bold'}}>{r.reason}</span> <br/>
+                      赢家 <strong style={{ color: 'var(--accent)' }}>{r.name}</strong> 依靠 <span style={{ color: 'white', fontWeight: 'bold' }}>{r.reason}</span> <br />
                       通吃 <span style={{ color: '#4caf50', fontWeight: 'bold' }}>💰 {r.won}</span> 筹码！
                     </div>
                   ))}
@@ -468,19 +475,19 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
             {/* 正常showdown的底牌揭晓 */}
             {gameState.players.filter(p => p.is_active && p.hole_cards && p.hole_cards.length > 0).length > 0 && (
               <div style={{ marginBottom: '30px', padding: '20px', background: 'rgba(0,0,0,0.4)', borderRadius: '15px', border: '1px solid rgba(255,255,255,0.1)' }}>
-                 <h4 style={{ color: 'var(--text-muted)', margin: '0 0 20px 0', fontSize: '1.1rem' }}>🃏 最终拼杀底牌揭晓 🃏</h4>
-                 <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                   {gameState.players.filter(p => p.is_active && p.hole_cards && p.hole_cards.length > 0).map(p => (
-                      <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 30px' }}>
-                         <span style={{ color: 'white', fontWeight: 'bold', fontSize: '1.3rem' }}>{p.name}</span>
-                         <div style={{ display: 'flex', gap: '10px' }}>
-                           {p.hole_cards.map((card, idx) => (
-                             <span key={idx} style={{ background: 'white', border: '1px solid #ccc', borderRadius: '8px', padding: '8px 15px', fontSize: '1.5rem', color: getCardColorClass(card) === 'red' ? '#e53935' : '#333', fontWeight: 'bold', boxShadow: '0 2px 5px rgba(0,0,0,0.5)' }}>{card}</span>
-                           ))}
-                         </div>
+                <h4 style={{ color: 'var(--text-muted)', margin: '0 0 20px 0', fontSize: '1.1rem' }}>🃏 最终拼杀底牌揭晓 🃏</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                  {gameState.players.filter(p => p.is_active && p.hole_cards && p.hole_cards.length > 0).map(p => (
+                    <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 30px' }}>
+                      <span style={{ color: 'white', fontWeight: 'bold', fontSize: '1.3rem' }}>{p.name}</span>
+                      <div style={{ display: 'flex', gap: '10px' }}>
+                        {p.hole_cards.map((card, idx) => (
+                          <span key={idx} style={{ background: 'white', border: '1px solid #ccc', borderRadius: '8px', padding: '8px 15px', fontSize: '1.5rem', color: getCardColorClass(card) === 'red' ? '#e53935' : '#333', fontWeight: 'bold', boxShadow: '0 2px 5px rgba(0,0,0,0.5)' }}>{card}</span>
+                        ))}
                       </div>
-                   ))}
-                 </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
@@ -497,42 +504,42 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
           </div>
         </div>
       )}
-      
+
       {/* 终极大赢家弹窗 */}
       {shouldShowVictory && me && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(255,215,0,0.2)', backdropFilter: 'blur(5px)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-           <div style={{ background: 'linear-gradient(135deg, #2a2a2a, #111)', padding: '50px', borderRadius: '20px', border: '3px solid gold', textAlign: 'center', boxShadow: '0px 0px 50px rgba(255,215,0,0.4)', maxWidth: '500px' }}>
-             <h1 style={{ fontSize: '3.5rem', color: 'gold', textShadow: '0px 0px 15px gold', margin: '0 0 20px 0' }}>👑 绝对征服 👑</h1>
-             <p style={{ fontSize: '1.2rem', color: 'white', lineHeight: '1.6', marginBottom: '30px' }}>
-               全桌对手已悉数破产！您的统治已经确立，当前筹码堆积如山：<br/>
-               <span style={{ fontSize: '2rem', color: '#4caf50', fontWeight: 'bold', display: 'block', margin: '15px 0' }}>💰 {me.chips}</span>
-             </p>
-             <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                 <button onClick={handleLeaveTable} style={{ padding: '15px', background: 'linear-gradient(to right, #e65c00, #F9D423)', color: 'white', border: 'none', borderRadius: '10px', fontSize: '1.2rem', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0px 5px 15px rgba(230, 92, 0, 0.4)'}}>
+        <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(255,215,0,0.2)', backdropFilter: 'blur(5px)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="modal-card victory-modal-card" style={{ background: 'linear-gradient(135deg, #2a2a2a, #111)', padding: '50px', borderRadius: '20px', border: '3px solid gold', textAlign: 'center', boxShadow: '0px 0px 50px rgba(255,215,0,0.4)', maxWidth: '500px' }}>
+            <h1 style={{ fontSize: '3.5rem', color: 'gold', textShadow: '0px 0px 15px gold', margin: '0 0 20px 0' }}>👑 绝对征服 👑</h1>
+            <p style={{ fontSize: '1.2rem', color: 'white', lineHeight: '1.6', marginBottom: '30px' }}>
+              全桌对手已悉数破产！您的统治已经确立，当前筹码堆积如山：<br />
+              <span style={{ fontSize: '2rem', color: '#4caf50', fontWeight: 'bold', display: 'block', margin: '15px 0' }}>💰 {me.chips}</span>
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              <button onClick={handleLeaveTable} style={{ padding: '15px', background: 'linear-gradient(to right, #e65c00, #F9D423)', color: 'white', border: 'none', borderRadius: '10px', fontSize: '1.2rem', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0px 5px 15px rgba(230, 92, 0, 0.4)' }}>
 
-                  🛑 带着荣誉离开 (退回大厅)
-                </button>
-                <button onClick={() => setVictoryDismissed(true)} style={{ padding: '15px', background: 'transparent', color: 'gold', border: '2px solid gold', borderRadius: '10px', fontSize: '1.2rem', cursor: 'pointer', fontWeight: 'bold'}}>
-                  🪑 傲视群雄 (留桌等待挑战者)
-                </button>
-             </div>
-           </div>
+                🛑 带着荣誉离开 (退回大厅)
+              </button>
+              <button onClick={() => setVictoryDismissed(true)} style={{ padding: '15px', background: 'transparent', color: 'gold', border: '2px solid gold', borderRadius: '10px', fontSize: '1.2rem', cursor: 'pointer', fontWeight: 'bold' }}>
+                🪑 傲视群雄 (留桌等待挑战者)
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
       <header className="header" style={{ position: 'relative', zIndex: 10000 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-           <button onClick={handleLeaveTable} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: 'var(--text-main)', padding: '10px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap:'5px' }}>
-             <LogOut size={16} /> 退大厅
-           </button>
-           <TutorialModal variant="rules" trigger="button" />
-           <h1>💎 牌桌 #{tableId}</h1>
+        <div className="table-title-bar" style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+          <button onClick={handleLeaveTable} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: 'var(--text-main)', padding: '10px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <LogOut size={16} /> 退大厅
+          </button>
+          <TutorialModal variant="rules" trigger="button" />
+          <h1>💎 牌桌 #{tableId}</h1>
         </div>
         <div className="turn-indicator">
           {currentTurnPlayer && !isWaitingOrShowdown ? (
             <span className="active-turn">🗣️ 当前轮到：{currentTurnPlayer.name}</span>
           ) : (
-             <span className="waiting">{gameState.phase === "SHOWDOWN" ? "亮牌结算！" : "队伍集结中..."}</span>
+            <span className="waiting">{gameState.phase === "SHOWDOWN" ? "亮牌结算！" : "队伍集结中..."}</span>
           )}
         </div>
       </header>
@@ -540,59 +547,59 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
       <main className="game-board">
         <div className="opponents">
           {gameState.players.map((p) => {
-             if (p.id === clientId) return null;
-             return (
-                <div key={p.id} className="opponent-card" style={{opacity: p.is_online ? (p.is_active ? 1 : 0.4) : 0.35, filter: p.is_online ? 'grayscale(0)' : 'grayscale(1)'}}>
+            if (p.id === clientId) return null;
+            return (
+              <div key={p.id} className="opponent-card" style={{ opacity: p.is_online ? (p.is_active ? 1 : 0.4) : 0.35, filter: p.is_online ? 'grayscale(0)' : 'grayscale(1)' }}>
 
-                 <UserCircle size={20} className="icon" />
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                    <span>{p.name} {!p.is_online ? '[🔴 掉线中]' : p.chips === 0 && p.is_active ? '(All-In)' : ''}</span>
-                    <span>💰 {p.chips} | 注: {p.current_bet}</span>
-                    <span style={{fontSize: '0.8rem', color:'var(--text-muted)'}}>
-                      ❤️ 剩余买入: {3 - p.revives_used}{gameState.phase === "WAITING" ? ` | ${p.is_ready ? '✅ 已准备' : '⏳ 未准备'}` : ''}
-                    </span>
+                <UserCircle size={20} className="icon" />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                  <span>{p.name} {!p.is_online ? '[🔴 掉线中]' : p.chips === 0 && p.is_active ? '(All-In)' : ''}</span>
+                  <span>💰 {p.chips} | 注: {p.current_bet}</span>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    ❤️ 剩余买入: {3 - p.revives_used}{gameState.phase === "WAITING" ? ` | ${p.is_ready ? '✅ 已准备' : '⏳ 未准备'}` : ''}
+                  </span>
+                </div>
+
+                {p.is_active || <span className="badge" style={{ background: 'var(--danger)' }}>弃牌</span>}
+                {gameState.current_turn_index === gameState.players.indexOf(p) && !isWaitingOrShowdown && (
+                  <span className="badge" style={{ background: 'var(--accent)' }}>思考中</span>
+                )}
+                {p.hole_cards && p.hole_cards.length > 0 && gameState.phase === "SHOWDOWN" && (
+                  <div style={{ display: 'flex', gap: '5px', marginTop: '10px' }}>
+                    {p.hole_cards.map((c, i) => (
+                      <span key={i} style={{ background: 'white', borderRadius: '4px', padding: '3px 8px', fontSize: '1rem', color: c.includes('♥') || c.includes('♦') ? '#e53935' : '#333', fontWeight: 'bold', boxShadow: '1px 1px 3px rgba(0,0,0,0.5)' }}>{c}</span>
+                    ))}
                   </div>
-
-                 {p.is_active || <span className="badge" style={{background: 'var(--danger)'}}>弃牌</span>}
-                 {gameState.current_turn_index === gameState.players.indexOf(p) && !isWaitingOrShowdown && (
-                   <span className="badge" style={{background: 'var(--accent)'}}>思考中</span>
-                 )}
-                 {p.hole_cards && p.hole_cards.length > 0 && gameState.phase === "SHOWDOWN" && (
-                   <div style={{display:'flex', gap:'5px', marginTop:'10px'}}>
-                     {p.hole_cards.map((c, i) => (
-                       <span key={i} style={{background:'white', borderRadius:'4px', padding:'3px 8px', fontSize:'1rem', color: c.includes('♥')||c.includes('♦')?'#e53935':'#333', fontWeight:'bold', boxShadow:'1px 1px 3px rgba(0,0,0,0.5)'}}>{c}</span>
-                     ))}
-                   </div>
-                 )}
-               </div>
-             )
+                )}
+              </div>
+            )
           })}
         </div>
 
         <section className="community-area">
           <h3>总底池: <span className="pot-amount">💰{gameState.pot}</span></h3>
-          <p style={{ margin:0, fontSize:'0.85rem', color:'var(--text-muted)'}}>盲注: {gameState.small_blind}/{gameState.big_blind} · 买入: {gameState.buy_in}</p>
+          <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>盲注: {gameState.small_blind}/{gameState.big_blind} · 买入: {gameState.buy_in}</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center' }}>
             {showRunTwiceBoards ? (
               gameState.run_twice_boards.map((board, rowIdx) => (
                 (rowIdx === 0 || gameState.phase === "SHOWDOWN" || board.length > runTwiceBaseCount) ? (
-                <div key={rowIdx} style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'center' }}>
-                  <span style={{ fontSize: '0.75rem', color: rowIdx === 0 ? '#4caf50' : '#64b5f6', fontWeight: 'bold', letterSpacing: '1px' }}>
-                    {rowIdx === 0 ? '第 1 排公共牌' : '第 2 排公共牌'}
-                  </span>
-                  <div className="cards-row">
-                    {board.length > 0
-                      ? board.map((card, i) => renderAnimatedCommunityCard(card, `${rowIdx}-${i}`))
-                      : <div className="card empty">等待发牌...</div>}
+                  <div key={rowIdx} style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.75rem', color: rowIdx === 0 ? '#4caf50' : '#64b5f6', fontWeight: 'bold', letterSpacing: '1px' }}>
+                      {rowIdx === 0 ? '第 1 排公共牌' : '第 2 排公共牌'}
+                    </span>
+                    <div className="cards-row">
+                      {board.length > 0
+                        ? board.map((card, i) => renderAnimatedCommunityCard(card, `${rowIdx}-${i}`))
+                        : <div className="card empty">等待发牌...</div>}
+                    </div>
                   </div>
-                </div>
                 ) : null
               ))
             ) : (
               <div className="cards-row">
-                {gameState.community_cards.length > 0 
-                 ? gameState.community_cards.map((card, i) => renderAnimatedCommunityCard(card, i))
-                 : <div className="card empty">等待发牌...</div>}
+                {gameState.community_cards.length > 0
+                  ? gameState.community_cards.map((card, i) => renderAnimatedCommunityCard(card, i))
+                  : <div className="card empty">等待发牌...</div>}
               </div>
             )}
           </div>
@@ -600,10 +607,10 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
         </section>
 
         {me && (
-          <section style={{ flexShrink: 0, background: 'rgba(0,0,0,0.75)', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', gap: '0' }}>
-            
+          <section className="player-panel" style={{ flexShrink: 0, background: 'rgba(0,0,0,0.75)', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', gap: '0' }}>
+
             {/* Row 1: 底牌 */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', padding: '0.8vh 2vw', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+            <div className="hole-card-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', padding: '0.8vh 2vw', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
               <span style={{ color: 'var(--primary)', fontWeight: 600, fontSize: 'clamp(0.75rem, 1.3vw, 1rem)' }}>
                 {me.name} 的底牌{isSpectating && ' 👁️观战中'}:
               </span>
@@ -623,7 +630,7 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
                 )}
               </div>
               {me.hole_cards.length > 0 && (
-                <button 
+                <button
                   onClick={() => {
                     if (cardsRevealed) return;
                     setCardsRevealed(true);
@@ -638,7 +645,7 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
             </div>
 
             {/* Row 2: 筹码 + 剩余买入 */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '20px', padding: '0.5vh 2vw', borderBottom: '1px solid rgba(255,255,255,0.06)', fontSize: 'clamp(0.7rem, 1.2vw, 0.9rem)' }}>
+            <div className="player-stats-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '20px', padding: '0.5vh 2vw', borderBottom: '1px solid rgba(255,255,255,0.06)', fontSize: 'clamp(0.7rem, 1.2vw, 0.9rem)' }}>
               <span style={{ color: 'var(--text-muted)' }}>筹码: <strong style={{ color: '#ffd700' }}>💰 {me.chips}</strong></span>
               <span style={{ color: 'var(--text-muted)' }}>本轮下注: <strong style={{ color: 'white' }}>💰 {me.current_bet}</strong></span>
               <span style={{ color: 'var(--text-muted)' }}>❤️ 剩余买入: <strong style={{ color: 'var(--accent)' }}>{3 - me.revives_used}</strong></span>
@@ -646,7 +653,7 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
             </div>
 
             {gameState.phase === "WAITING" ? (
-              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px', padding: '1vh 2vw', flexWrap: 'wrap' }}>
+              <div className="waiting-actions-row" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px', padding: '1vh 2vw', flexWrap: 'wrap' }}>
                 <button
                   className="btn-start"
                   style={{ padding: '0.8vh 3vw', fontSize: 'clamp(0.85rem, 1.5vw, 1.1rem)', opacity: isSpectating || me.chips === 0 || me.is_ready ? 0.5 : 1 }}
@@ -674,7 +681,7 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
             ) : (
               <>
                 {/* Row 3: 弃牌 + 过牌/跟注 */}
-                <div style={{ display: 'flex', justifyContent: 'center', gap: '10px', padding: '0.6vh 2vw', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                <div className="primary-actions-row" style={{ display: 'flex', justifyContent: 'center', gap: '10px', padding: '0.6vh 2vw', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
                   <button style={{ flex: 1, maxWidth: '200px', background: 'var(--danger)', color: 'white', opacity: disableControls ? 0.3 : 1, cursor: disableControls ? 'not-allowed' : 'pointer', justifyContent: 'center' }} disabled={disableControls} onClick={() => handleAction("fold")}>
                     <XCircle size={16} /> 弃牌
                   </button>
@@ -690,20 +697,20 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
                 </div>
 
                 {/* Row 4: 预设加注 + 自定义输入 + 加注按钮 + ALL-IN */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.6vh 2vw', flexWrap: 'wrap', opacity: disableControls ? 0.3 : 1, pointerEvents: disableControls ? 'none' : 'auto' }}>
+                <div className="raise-actions-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.6vh 2vw', flexWrap: 'wrap', opacity: disableControls ? 0.3 : 1, pointerEvents: disableControls ? 'none' : 'auto' }}>
                   <button onClick={() => setRaiseAmount(minRaiseTotal)} style={presetBtnStyle}>最小</button>
                   <button onClick={() => setRaiseAmount(Math.min(gameState.current_highest_bet * 2, maxRaiseTotal))} style={presetBtnStyle}>2x</button>
                   <button onClick={() => setRaiseAmount(Math.min(gameState.current_highest_bet * 3, maxRaiseTotal))} style={presetBtnStyle}>3x</button>
                   <button onClick={() => setRaiseAmount(Math.min(Math.floor(gameState.pot / 2) + gameState.current_highest_bet, maxRaiseTotal))} style={presetBtnStyle}>½底池</button>
                   <button onClick={() => setRaiseAmount(Math.min(gameState.pot + gameState.current_highest_bet, maxRaiseTotal))} style={presetBtnStyle}>满底池</button>
-                  <input 
-                     type="number" min={minRaiseTotal} max={maxRaiseTotal} value={effectiveRaiseAmount}
+                  <input
+                    type="number" min={minRaiseTotal} max={maxRaiseTotal} value={effectiveRaiseAmount}
 
-                    onChange={(e) => { const v = Number(e.target.value); if (!isNaN(v)) setRaiseAmount(v); }} 
-                    style={{ width: '70px', padding: '4px 6px', background: 'rgba(0,0,0,0.5)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '6px', fontSize: 'clamp(0.7rem, 1.1vw, 0.9rem)', textAlign: 'center', outline: 'none' }} 
+                    onChange={(e) => { const v = Number(e.target.value); if (!isNaN(v)) setRaiseAmount(v); }}
+                    style={{ width: '70px', padding: '4px 6px', background: 'rgba(0,0,0,0.5)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '6px', fontSize: 'clamp(0.7rem, 1.1vw, 0.9rem)', textAlign: 'center', outline: 'none' }}
                   />
-                   <button className="btn-bet" onClick={() => handleAction("raise", effectiveRaiseAmount - me.current_bet)} disabled={effectiveRaiseAmount > maxRaiseTotal || effectiveRaiseAmount < minRaiseTotal} style={{ fontSize: 'clamp(0.7rem, 1.1vw, 0.9rem)' }}>
-                     <ArrowUpCircle size={14} /> 加注到 {effectiveRaiseAmount}
+                  <button className="btn-bet" onClick={() => handleAction("raise", effectiveRaiseAmount - me.current_bet)} disabled={effectiveRaiseAmount > maxRaiseTotal || effectiveRaiseAmount < minRaiseTotal} style={{ fontSize: 'clamp(0.7rem, 1.1vw, 0.9rem)' }}>
+                    <ArrowUpCircle size={14} /> 加注到 {effectiveRaiseAmount}
 
                   </button>
                   <button style={{ background: 'linear-gradient(135deg, #7b1fa2, #4a148c)', color: 'white', opacity: disableControls ? 0.3 : 1, cursor: disableControls ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: 'clamp(0.7rem, 1.1vw, 0.9rem)' }} disabled={disableControls} onClick={() => handleAction("all-in")}>
