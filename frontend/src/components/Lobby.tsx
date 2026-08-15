@@ -10,6 +10,7 @@ type TableInfo = {
   table_id: string;
   phase: string;
   player_count: number;
+  seat_count: number;
 };
 
 type Props = {
@@ -216,14 +217,15 @@ export const Lobby: React.FC<Props> = ({ onJoinTable, onLogout, username, global
               <div key={t.table_id} className="opponent-card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '25px' }}>
                 <h3 style={{ margin: '0 0 10px 0', color: 'white', fontSize: '1.2rem' }}>牌桌 #{t.table_id}</h3>
                 <p style={{ margin: '5px 0', fontSize: '0.95rem', color: 'var(--text-muted)' }}>当前在线: {t.player_count} 人</p>
+                <p style={{ margin: '5px 0', fontSize: '0.95rem', color: 'var(--text-muted)' }}>在座人数: {t.seat_count}/8</p>
                 <p style={{ margin: '5px 0 20px 0', fontSize: '0.95rem', color: 'var(--text-muted)' }}>游戏进度: {t.phase}</p>
                 <button
                   onClick={() => handleJoinTable(t.table_id)}
                   className="btn-start"
-                  style={{ width: '100%', justifyContent: 'center', opacity: globalChips < 1 ? 0.4 : 1 }}
-                  disabled={globalChips < 1}
+                  style={{ width: '100%', justifyContent: 'center', opacity: globalChips < 1 || t.seat_count >= 8 ? 0.4 : 1 }}
+                  disabled={globalChips < 1 || t.seat_count >= 8}
                 >
-                  <LogIn size={18} /> 加入这桌 (消耗1💎)
+                  <LogIn size={18} /> {t.seat_count >= 8 ? '牌桌已满 (8/8)' : '加入这桌 (消耗1💎)'}
                 </button>
               </div>
             ))}

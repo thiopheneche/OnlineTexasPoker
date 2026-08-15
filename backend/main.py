@@ -24,6 +24,7 @@ app.add_middleware(
 
 tables: Dict[str, GameState] = {}
 decks: Dict[str, Deck] = {}
+MAX_TABLE_PLAYERS = 8
 
 class ConnectionManager:
     def __init__(self):
@@ -204,6 +205,8 @@ async def join_table(table_id: str, req: JoinTableRequest):
         return {"success": False, "error": "该牌桌不存在"}
     if any(p.id == req.username for p in tables[table_id].players):
         return {"success": True, "global_chips": get_global_chips(req.username)}
+    if len(tables[table_id].players) >= MAX_TABLE_PLAYERS:
+        return {"success": False, "error": "该牌桌已满（最多 8 人）"}
     account = ensure_account(req.username)
     chips = int(account["global_chips"])
     if chips < 1:
@@ -218,7 +221,8 @@ async def get_tables():
         result.append({
             "table_id": tid,
             "phase": state.phase,
-            "player_count": sum(1 for p in state.players if p.is_active)
+            "player_count": sum(1 for p in state.players if p.is_online),
+            "seat_count": len(state.players),
         })
     return result
 
@@ -281,6 +285,13 @@ async def websocket_endpoint(websocket: WebSocket, table_id: str, client_id: str
         
     global_game_state = tables[table_id]
     global_deck = decks[table_id]
+
+    if (
+        not any(p.id == client_id for p in global_game_state.players)
+        and len(global_game_state.players) >= MAX_TABLE_PLAYERS
+    ):
+        await websocket.close(code=1008, reason="Table is full")
+        return
     
     await manager.connect(websocket, table_id)
     

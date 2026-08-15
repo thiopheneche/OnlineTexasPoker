@@ -1,5 +1,5 @@
-# Test files
-test*.py
+# Legacy root-level test scripts
+/test*.py
 
 # Project summary (local only)
 summary.md

@@ -50,13 +50,15 @@ AntigravityTest/
 │   ├── requirements.txt        # Python 依赖（fastapi, uvicorn, pydantic）
 │   ├── data/
 │   │   └── users.json          # 本地账号与全局筹码持久化数据（运行时自动生成）
-│   └── poker_logic/
-│       ├── __init__.py
-│       ├── card.py             # Card 类：花色(Suit) + 点数(Rank)
-│       ├── deck.py             # Deck 类：洗牌、发牌
-│       ├── evaluator.py        # 牌型评估器：判断牌型、比较大小
-│       ├── game.py             # PokerEngine：游戏核心逻辑引擎
-│       └── game_state.py       # Pydantic 数据模型：Player, GameState, GamePhase
+│   ├── poker_logic/
+│   │   ├── __init__.py
+│   │   ├── card.py             # Card 类：花色(Suit) + 点数(Rank)
+│   │   ├── deck.py             # Deck 类：洗牌、发牌
+│   │   ├── evaluator.py        # 牌型评估器：判断牌型、比较大小
+│   │   ├── game.py             # PokerEngine：游戏核心逻辑引擎
+│   │   └── game_state.py       # Pydantic 数据模型：Player, GameState, GamePhase
+│   └── tests/
+│       └── test_turn_order.py  # 2-8 人位置、盲注与翻前/翻后行动顺序测试
 └── frontend/
     ├── index.html              # HTML 入口（标题: TexasPoker，黑桃A favicon）
     ├── vite.config.ts          # Vite 配置
@@ -86,7 +88,7 @@ AntigravityTest/
 | POST | `/api/login` | 用户登录/恢复持久化账号 | `{username: string}` | `{success, error?, global_chips, reconnect_table_id?}` |
 | GET | `/api/users` | 获取在线用户列表 | 无 | `{users: string[], count: number}` |
 | GET | `/api/chips/{username}` | 查询全局筹码余额 | 无 | `{global_chips: number}` |
-| GET | `/api/tables` | 获取所有牌桌列表 | 无 | `[{table_id, phase, player_count}]` |
+| GET | `/api/tables` | 获取所有牌桌列表 | 无 | `[{table_id, phase, player_count, seat_count}]` |
 | POST | `/api/tables` | 创建新牌桌（扣1筹码） | `{small_blind, big_blind, buy_in, username}` | `{success, table_id, global_chips}` |
 | POST | `/api/tables/join/{table_id}` | 加入牌桌（扣1筹码；若玩家已在该牌桌中则不重复扣除） | `{username: string}` | `{success, error?, global_chips}` |
 
@@ -117,7 +119,7 @@ AntigravityTest/
   "players": [{
     "id": "", "name": "", "chips": 1000, "current_bet": 0,
     "total_investment": 0, "is_active": true, "is_online": true, "has_acted": false,
-    "revives_used": 0, "hole_cards": ["♠A", "♥K"]
+    "revives_used": 0, "position": "BTN", "hole_cards": ["♠A", "♥K"]
   }],
   "button_index": 0,
   "current_turn_index": 0
@@ -136,7 +138,7 @@ AntigravityTest/
 ### 5.1 game_state.py - 数据模型
 
 - **GamePhase**: `WAITING → PREFLOP → FLOP → TURN → RIVER → SHOWDOWN`
-- **Player**: id, name, chips(默认买入金额，初始2000), current_bet, total_investment, is_active, has_acted, revives_used(最多3次), hole_cards
+- **Player**: id, name, chips(默认买入金额，初始2000), current_bet, total_investment, is_active, has_acted, revives_used(最多3次), position(本手牌位置), hole_cards
 - **GameState**: table_id, phase, pot, current_highest_bet, small_blind(默认5), big_blind(默认10), buy_in(默认2000), min_raise, showdown_results, community_cards, players, button_index, current_turn_index
 
 ### 5.2 game.py - PokerEngine 引擎
@@ -146,7 +148,7 @@ AntigravityTest/
 | 方法 | 功能 |
 |------|------|
 | `process_action()` | 处理所有玩家动作（fold/check/call/raise/all-in/revive/start/show_cards/hide_cards） |
-| `_start_new_hand()` | 开新一手牌：洗牌、发底牌、收盲注、设置button |
+| `_start_new_hand()` | 开新一手牌：洗牌、发底牌、轮换庄位、分配位置名称并收盲注 |
 | `_execute_showdown()` | 结算：单人获胜(弃牌赢)或多人比牌 |
 | `_advance_turn_or_phase()` | 推进回合：判断是否所有人已行动，决定进入下一阶段或结算 |
 | `_fast_forward_to_showdown()` | 快速翻牌（所有人all-in后自动翻完公共牌） |
@@ -158,6 +160,8 @@ AntigravityTest/
 - **弃牌获胜亮牌选择**: 弃牌赢时，赢家底牌默认隐藏（`hole_cards`清空，原牌保存在`_saved_hole_cards`）。赢家可发送`show_cards`/`hide_cards`选择是否向全桌展示
 - **复活系统**: 破产后按当前牌桌 `buy_in` 重新买入复活，每人最多3次（`revives_used`）
 - **未注资返还**: 当单人加注但无人跟到同等额度时，多出部分自动退回
+- **标准位置与行动顺序**: 3 人及以上由庄位左侧依次设置 SB、BB，翻前从 BB 左侧行动，翻后从 BTN 左侧行动；单挑由 BTN 兼任 SB，翻前先行动、翻后最后行动
+- **2-8 人位置名称**: `BTN/SB, BB`（2人）；`BTN, SB, BB`（3人）；之后依人数补充 `CO`、`UTG`、`HJ`、`MP`、`UTG+1`，未参与本手的玩家不占位置
 
 ### 5.4 evaluator.py - 牌型评估
 
@@ -191,6 +195,7 @@ AntigravityTest/
 **功能**：
 - 显示全局筹码余额（金色徽章）
 - 牌桌列表（每5秒刷新）+ 创建牌桌 + 加入牌桌
+- 显示在线人数与在座人数；每桌最多 8 人，满桌后禁用加入按钮
 - 建桌时可自定义小盲/大盲与买入金额（默认 5/10、2000）
 - 筹码不足时按钮禁用并显示错误提示
 - 在线玩家人数和ID列表（每5秒刷新）
@@ -207,8 +212,8 @@ AntigravityTest/
 
 | 区域 | 内容 |
 |------|------|
-| Header | 牌桌ID + 退出按钮 + 当前轮次指示器 |
-| 对手区 | 对手信息卡片（筹码/下注/状态/底牌展示，掉线时显示 `[🔴 掉线中]` 并置灰） |
+| Header | 牌桌ID + 退出按钮 + 当前轮次指示器（含位置标签） |
+| 对手区 | 对手信息卡片（位置/筹码/下注/状态/底牌展示，掉线时显示 `[🔴 掉线中]` 并置灰） |
 | 公共区 | 底池 + 公共牌 + 当前阶段 |
 | Row 1 | 玩家底牌（默认盖牌，点击"看牌"亮3秒） |
 | Row 2 | 筹码余额 + 本轮下注 + 剩余买入次数 + 等待区准备状态 |
@@ -431,6 +436,7 @@ AntigravityTest/
 31. ✅ 修复全局筹码离桌兑换没有随牌桌买入额变化的问题，并避免同一玩家续回同一牌桌时重复扣除入桌全局筹码
 32. ✅ 修复前端本地开发默认连接线上服务的问题，将 API / WebSocket 地址集中到 `config.ts`
 33. ✅ 修复聊天面板开关导致牌桌 WebSocket 重连的问题
+34. ✅ 修复多人桌庄位/盲位建模及翻后从数组首位行动的问题，恢复标准翻前/翻后顺序，并增加 2-8 人位置标注与 8 人上限
 
 ---
 
@@ -489,3 +495,4 @@ AntigravityTest/
 | 2026-05-15 | 增加前端 API / WebSocket 集中配置，修复本地开发写死线上域名与聊天面板开关导致牌桌 WebSocket 重连的问题 | `frontend/src/config.ts`, `frontend/src/vite-env.d.ts`, `frontend/src/App.tsx`, `frontend/src/components/Lobby.tsx`, `frontend/src/components/PokerTable.tsx`, `summary.md` |
 | 2026-05-15 | 加强手机端 UI 防截断方案：牌桌内部滚动、弹窗与聊天面板移动端宽高约束、登录页和大厅移动端约束 | `frontend/src/index.css`, `frontend/src/App.tsx`, `frontend/src/components/Lobby.tsx`, `frontend/src/components/PokerTable.tsx`, `summary.md` |
 | 2026-05-15 | 按部署流程推送 `online-edition` 并更新 VPS：拉取代码、重启 `texas-poker`、重新构建前端并覆盖 `/var/www/texas_poker/` | `summary.md`, `README.md`, `backend/main.py`, `frontend/src/*` |
+| 2026-08-15 | 修复庄位、盲位和翻后行动顺序；增加 2-8 人位置标签、8 人满桌限制及规则回归测试 | `backend/main.py`, `backend/poker_logic/game.py`, `backend/poker_logic/game_state.py`, `backend/tests/test_turn_order.py`, `frontend/src/components/Lobby.tsx`, `frontend/src/components/PokerTable.tsx`, `frontend/src/index.css`, `README.md`, `summary.md` |

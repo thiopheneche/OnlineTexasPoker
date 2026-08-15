@@ -14,6 +14,7 @@ export type Player = {
   is_ready: boolean;
   has_acted: boolean;
   revives_used: number;
+  position: string;
   hole_cards: string[];
 };
 
@@ -537,7 +538,10 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
         </div>
         <div className="turn-indicator">
           {currentTurnPlayer && !isWaitingOrShowdown ? (
-            <span className="active-turn">🗣️ 当前轮到：{currentTurnPlayer.name}</span>
+            <span className="active-turn">
+              🗣️ 当前轮到：{currentTurnPlayer.name}
+              {currentTurnPlayer.position && <span className="position-badge">{currentTurnPlayer.position}</span>}
+            </span>
           ) : (
             <span className="waiting">{gameState.phase === "SHOWDOWN" ? "亮牌结算！" : "队伍集结中..."}</span>
           )}
@@ -553,7 +557,11 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
 
                 <UserCircle size={20} className="icon" />
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                  <span>{p.name} {!p.is_online ? '[🔴 掉线中]' : p.chips === 0 && p.is_active ? '(All-In)' : ''}</span>
+                  <span className="player-name-line">
+                    <span>{p.name}</span>
+                    {p.position && <span className="position-badge">{p.position}</span>}
+                    {!p.is_online ? '[🔴 掉线中]' : p.chips === 0 && p.is_active ? '(All-In)' : ''}
+                  </span>
                   <span>💰 {p.chips} | 注: {p.current_bet}</span>
                   <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                     ❤️ 剩余买入: {3 - p.revives_used}{gameState.phase === "WAITING" ? ` | ${p.is_ready ? '✅ 已准备' : '⏳ 未准备'}` : ''}
@@ -612,7 +620,9 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
             {/* Row 1: 底牌 */}
             <div className="hole-card-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', padding: '0.8vh 2vw', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
               <span style={{ color: 'var(--primary)', fontWeight: 600, fontSize: 'clamp(0.75rem, 1.3vw, 1rem)' }}>
-                {me.name} 的底牌{isSpectating && ' 👁️观战中'}:
+                {me.name}
+                {me.position && <span className="position-badge">{me.position}</span>}
+                {' '}的底牌{isSpectating && ' 👁️观战中'}:
               </span>
               <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                 {me.hole_cards.length > 0 ? (

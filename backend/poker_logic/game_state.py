@@ -21,6 +21,7 @@ class Player(BaseModel):
     is_ready: bool = False
     has_acted: bool = False
     revives_used: int = 0
+    position: str = ""
     hole_cards: List[str] = Field(default_factory=list)
 
 class GameState(BaseModel):

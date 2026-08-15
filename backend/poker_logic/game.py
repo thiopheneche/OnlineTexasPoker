@@ -3,6 +3,39 @@ from .deck import Deck
 import asyncio
 
 class PokerEngine:
+    POSITION_NAMES = {
+        2: ["BTN/SB", "BB"],
+        3: ["BTN", "SB", "BB"],
+        4: ["BTN", "SB", "BB", "CO"],
+        5: ["BTN", "SB", "BB", "UTG", "CO"],
+        6: ["BTN", "SB", "BB", "UTG", "HJ", "CO"],
+        7: ["BTN", "SB", "BB", "UTG", "MP", "HJ", "CO"],
+        8: ["BTN", "SB", "BB", "UTG", "UTG+1", "MP", "HJ", "CO"],
+    }
+
+    @staticmethod
+    def _next_player_index(state: GameState, start_index: int) -> int:
+        """Return the next clockwise seat that has chips and can join the hand."""
+        num_players = len(state.players)
+        next_index = (start_index + 1) % num_players
+        for _ in range(num_players):
+            if state.players[next_index].chips > 0:
+                return next_index
+            next_index = (next_index + 1) % num_players
+        return start_index
+
+    @staticmethod
+    def _assign_positions(state: GameState):
+        active_count = sum(1 for player in state.players if player.is_active)
+        position_names = PokerEngine.POSITION_NAMES.get(active_count, [])
+        if not position_names:
+            return
+
+        seat_index = state.button_index
+        for position_name in position_names:
+            state.players[seat_index].position = position_name
+            seat_index = PokerEngine._next_player_index(state, seat_index)
+
     @staticmethod
     def _remaining_board_cards(state: GameState):
         if state.phase == GamePhase.PREFLOP:
@@ -216,6 +249,7 @@ class PokerEngine:
             p.total_investment = 0
             p.has_acted = False
             p.is_ready = False
+            p.position = ""
             if p.chips > 0:
                 p.is_active = True
                 p.hole_cards = [str(c) for c in deck.deal(2)]
@@ -227,24 +261,20 @@ class PokerEngine:
         if len(actual_players) < 2:
             return
         
-        # Rotate the button position through state.players (not the filtered list)
-        # This ensures consistent rotation even when player count changes
+        # Rotate the dealer button through occupied seats with chips.
         num_players = len(state.players)
-        next_btn = (state.button_index + 1) % num_players
-        # Find next player with chips > 0 to be the button/SB
-        for _ in range(num_players):
-            if state.players[next_btn].chips > 0:
-                break
-            next_btn = (next_btn + 1) % num_players
-        state.button_index = next_btn
-        
-        sb_player = state.players[state.button_index]
-        # Find next active player after SB to be BB
-        bb_idx = (state.button_index + 1) % num_players
-        for _ in range(num_players):
-            if state.players[bb_idx].chips > 0:
-                break
-            bb_idx = (bb_idx + 1) % num_players
+        state.button_index = PokerEngine._next_player_index(state, state.button_index)
+        PokerEngine._assign_positions(state)
+
+        # Heads-up is the exception: the button posts the small blind. With
+        # three or more players, the small blind is immediately left of BTN.
+        if len(actual_players) == 2:
+            sb_idx = state.button_index
+        else:
+            sb_idx = PokerEngine._next_player_index(state, state.button_index)
+        bb_idx = PokerEngine._next_player_index(state, sb_idx)
+
+        sb_player = state.players[sb_idx]
         bb_player = state.players[bb_idx]
 
         sb_amount = min(sb_player.chips, state.small_blind)
@@ -260,7 +290,9 @@ class PokerEngine:
         state.pot += bb_amount
         
         state.phase = GamePhase.PREFLOP
-        state.current_turn_index = state.players.index(bb_player)
+        # Preflop starts left of the big blind. Heads-up this correctly makes
+        # the button/small blind act first.
+        state.current_turn_index = bb_idx
         PokerEngine._find_next_active_player(state)
 
     @staticmethod
@@ -493,9 +525,6 @@ class PokerEngine:
         state.current_highest_bet = 0
         state.min_raise = state.big_blind
         
-        state.current_turn_index = -1
-        PokerEngine._find_next_active_player(state)
-
         if state.phase == GamePhase.PREFLOP:
             state.community_cards = [str(c) for c in deck.deal(3)]
             state.phase = GamePhase.FLOP
@@ -507,6 +536,12 @@ class PokerEngine:
             state.phase = GamePhase.RIVER
         elif state.phase == GamePhase.RIVER:
             PokerEngine._execute_showdown(state)
+            return
+
+        # Every postflop street starts with the first eligible player left of
+        # the dealer. Heads-up this is the big blind; BTN/SB acts last.
+        state.current_turn_index = state.button_index
+        PokerEngine._find_next_active_player(state)
 
     @staticmethod
     def _find_next_active_player(state: GameState):
