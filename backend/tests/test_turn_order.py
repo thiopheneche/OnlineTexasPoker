@@ -96,6 +96,21 @@ class TurnOrderTests(unittest.TestCase):
 
         self.assertEqual(state.current_turn_index, 2)
 
+    def test_normal_showdown_hides_folded_hands_only(self):
+        state = make_state(3)
+        state.pot = 60
+        state.community_cards = ["♣2", "♦3", "♣4", "♦5", "♣9"]
+        state.players[0].hole_cards = ["♠A", "♥A"]
+        state.players[1].hole_cards = ["♠K", "♥K"]
+        state.players[2].hole_cards = ["♠Q", "♥Q"]
+        state.players[2].is_active = False
+
+        PokerEngine._execute_showdown(state)
+
+        self.assertEqual(state.players[0].hole_cards, ["♠A", "♥A"])
+        self.assertEqual(state.players[1].hole_cards, ["♠K", "♥K"])
+        self.assertEqual(state.players[2].hole_cards, [])
+
 class BettingRoundOrderTests(unittest.IsolatedAsyncioTestCase):
     async def test_showdown_results_remain_until_every_player_is_ready(self):
         state = make_state(3)
@@ -158,6 +173,26 @@ class BettingRoundOrderTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(state.players[state.current_turn_index].position, "BB")
         await PokerEngine.process_action(state, deck, "p1", "check")
         self.assertEqual(state.players[state.current_turn_index].position, "BTN/SB")
+
+    async def test_fold_win_hides_folded_hand_and_limits_optional_reveal_to_winner(self):
+        state = make_state(2)
+        deck = Deck()
+        PokerEngine._start_new_hand(state, deck)
+        folded_cards = list(state.players[0].hole_cards)
+        winner_cards = list(state.players[1].hole_cards)
+
+        await PokerEngine.process_action(state, deck, "p0", "fold")
+
+        self.assertEqual(state.phase, GamePhase.SHOWDOWN)
+        self.assertEqual(state.players[0].hole_cards, [])
+        self.assertEqual(state.players[1].hole_cards, [])
+
+        await PokerEngine.process_action(state, deck, "p0", "show_cards")
+        self.assertEqual(state.players[0].hole_cards, [])
+
+        await PokerEngine.process_action(state, deck, "p1", "show_cards")
+        self.assertEqual(state.players[1].hole_cards, winner_cards)
+        self.assertNotEqual(state.players[1].hole_cards, folded_cards)
 
 
 if __name__ == "__main__":

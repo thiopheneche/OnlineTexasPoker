@@ -157,7 +157,7 @@ AntigravityTest/
 
 ### 5.3 特殊机制
 
-- **弃牌获胜亮牌选择**: 弃牌赢时，赢家底牌默认隐藏（`hole_cards`清空，原牌保存在`_saved_hole_cards`）。赢家可发送`show_cards`/`hide_cards`选择是否向全桌展示
+- **弃牌获胜亮牌选择**: 弃牌赢时，所有弃牌者底牌会从结算状态中清除；赢家底牌默认隐藏（`hole_cards`清空，原牌保存在`_saved_hole_cards`），仅当前赢家可发送`show_cards`/`hide_cards`选择是否向全桌展示
 - **复活系统**: 破产后按当前牌桌 `buy_in` 重新买入复活，每人最多3次（`revives_used`）
 - **未注资返还**: 当单人加注但无人跟到同等额度时，多出部分自动退回
 - **标准位置与行动顺序**: 3 人及以上由庄位左侧依次设置 SB、BB，翻前从 BB 左侧行动，翻后从 BTN 左侧行动；单挑由 BTN 兼任 SB，翻前先行动、翻后最后行动
@@ -501,3 +501,4 @@ AntigravityTest/
 | 2026-08-15 | 将快捷加注按钮和数字输入框替换为移动端加注滑块，左端为合法最小值、右端为 ALL-IN，并在每次轮到玩家时重置到最小值 | `frontend/src/components/PokerTable.tsx`, `frontend/src/index.css`, `README.md`, `summary.md` |
 | 2026-08-15 | 保留 SHOWDOWN 直到全员准备开局，各客户端独立关闭结算；破产玩家确认结果后再显示破产弹窗，并优化手机端结算按钮布局 | `backend/poker_logic/game.py`, `backend/tests/test_turn_order.py`, `frontend/src/components/PokerTable.tsx`, `frontend/src/index.css`, `README.md`, `summary.md` |
 | 2026-08-15 | 看牌改为手动状态切换，取消3秒自动盖牌，并增加明确的看牌/盖牌按钮 | `PokerTable.tsx`, `Tutorial.tsx`, `index.css`, `README.md`, `summary.md` |
+| 2026-08-15 | 修复弃牌者底牌在结算时被公开的问题，并清理跨手牌亮牌缓存、限制弃牌获胜亮牌权限 | `backend/poker_logic/game.py`, `backend/tests/test_turn_order.py`, `frontend/src/components/PokerTable.tsx`, `README.md`, `summary.md` |

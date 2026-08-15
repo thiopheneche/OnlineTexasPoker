@@ -608,7 +608,7 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
                 {gameState.current_turn_index === gameState.players.indexOf(p) && !isWaitingOrShowdown && (
                   <span className="badge" style={{ background: 'var(--accent)' }}>思考中</span>
                 )}
-                {p.hole_cards && p.hole_cards.length > 0 && gameState.phase === "SHOWDOWN" && (
+                {p.is_active && p.hole_cards && p.hole_cards.length > 0 && gameState.phase === "SHOWDOWN" && (
                   <div style={{ display: 'flex', gap: '5px', marginTop: '10px' }}>
                     {p.hole_cards.map((c, i) => (
                       <span key={i} style={{ background: 'white', borderRadius: '4px', padding: '3px 8px', fontSize: '1rem', color: c.includes('♥') || c.includes('♦') ? '#e53935' : '#333', fontWeight: 'bold', boxShadow: '1px 1px 3px rgba(0,0,0,0.5)' }}>{c}</span>

@@ -106,8 +106,24 @@ class PokerEngine:
         
         if action == "show_cards":
             if state.phase == GamePhase.SHOWDOWN:
+                is_fold_win = any(
+                    result.get("reason") == "其余参赛者均弃牌(Fold)"
+                    for result in state.showdown_results
+                )
                 for p in state.players:
-                    if p.id == player_id and hasattr(p, '_saved_hole_cards') and p._saved_hole_cards:
+                    if p.id != player_id:
+                        continue
+                    is_current_winner = any(
+                        result.get("name") == p.name
+                        for result in state.showdown_results
+                    )
+                    can_reveal = (
+                        p.is_active
+                        and is_fold_win
+                        and is_current_winner
+                        and getattr(p, '_saved_hole_cards', [])
+                    )
+                    if can_reveal:
                         p.hole_cards = list(p._saved_hole_cards)
             return
         
@@ -241,6 +257,7 @@ class PokerEngine:
             p.has_acted = False
             p.is_ready = False
             p.position = ""
+            p._saved_hole_cards = []
             if p.chips > 0:
                 p.is_active = True
                 p.hole_cards = [str(c) for c in deck.deal(2)]
@@ -311,8 +328,17 @@ class PokerEngine:
         return winners, hand_names
 
     @staticmethod
+    def _prepare_showdown_cards(state: GameState):
+        """Discard folded hands and clear any reveal cache from an earlier hand."""
+        for player in state.players:
+            player._saved_hole_cards = []
+            if not player.is_active:
+                player.hole_cards = []
+
+    @staticmethod
     def _execute_showdown(state: GameState):
         state.phase = GamePhase.SHOWDOWN
+        PokerEngine._prepare_showdown_cards(state)
         
         participants_not_folded = [p for p in state.players if p.is_active and len(p.hole_cards) > 0]
         if len(participants_not_folded) == 1:
@@ -343,6 +369,7 @@ class PokerEngine:
     def _execute_showdown_twice(state: GameState, board1: list, board2: list):
         """Execute showdown with two boards, splitting the pot 50/50."""
         state.phase = GamePhase.SHOWDOWN
+        PokerEngine._prepare_showdown_cards(state)
         state.run_twice_boards = [board1, board2]
         
         half_pot = state.pot // 2
