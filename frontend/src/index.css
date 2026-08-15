@@ -357,6 +357,36 @@ html, body {
   gap: 8px;
 }
 
+.card-visibility-toggle {
+  display: inline-flex;
+  min-width: 78px;
+  min-height: 36px;
+  padding: 6px 12px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.15);
+  color: #ddd;
+  font-size: clamp(0.7rem, 1.1vw, 0.85rem);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.card-visibility-toggle.is-revealed {
+  border-color: var(--accent);
+  background: rgba(3, 218, 198, 0.2);
+  color: var(--accent);
+}
+
+.card-visibility-toggle:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
 .actions {
   display: flex;
   gap: 8px;

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { Coins, Play, UserCircle, LogOut, Check, ArrowUpCircle, XCircle, MessageSquare, Send } from 'lucide-react';
+import { Coins, Play, UserCircle, LogOut, Check, ArrowUpCircle, XCircle, MessageSquare, Send, Eye, EyeOff } from 'lucide-react';
 import { TutorialModal } from './Tutorial';
 import { tableWsUrl } from '../config';
 
@@ -69,7 +69,6 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
   const [unreadCount, setUnreadCount] = useState<number>(0);
   const [cardsRevealed, setCardsRevealed] = useState<boolean>(false);
   const [settlementDismissed, setSettlementDismissed] = useState<boolean>(false);
-  const peekTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ws = useRef<WebSocket | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const leavingRef = useRef(false);
@@ -116,7 +115,6 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
       } catch (e) { console.error("Failed to parse", e); }
     };
     return () => {
-      if (peekTimerRef.current) clearTimeout(peekTimerRef.current);
       const socket = ws.current;
       ws.current = null;
       if (!leavingRef.current) {
@@ -679,15 +677,14 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
               </div>
               {me.hole_cards.length > 0 && (
                 <button
-                  onClick={() => {
-                    if (cardsRevealed) return;
-                    setCardsRevealed(true);
-                    if (peekTimerRef.current) clearTimeout(peekTimerRef.current);
-                    peekTimerRef.current = setTimeout(() => setCardsRevealed(false), 3000);
-                  }}
-                  style={{ padding: '4px 12px', background: cardsRevealed ? 'rgba(3,218,198,0.3)' : 'rgba(255,255,255,0.15)', color: cardsRevealed ? 'var(--accent)' : '#ccc', border: `1px solid ${cardsRevealed ? 'var(--accent)' : 'rgba(255,255,255,0.2)'}`, borderRadius: '8px', cursor: cardsRevealed ? 'default' : 'pointer', fontSize: 'clamp(0.7rem, 1.1vw, 0.85rem)', whiteSpace: 'nowrap', transition: 'all 0.3s' }}
+                  type="button"
+                  className={`card-visibility-toggle${cardsRevealed ? ' is-revealed' : ''}`}
+                  onClick={() => setCardsRevealed(revealed => !revealed)}
+                  aria-pressed={cardsRevealed}
+                  aria-label={cardsRevealed ? '盖住底牌' : '查看底牌'}
                 >
-                  {cardsRevealed ? '👁️ 展示中...' : '👀 看牌'}
+                  {cardsRevealed ? <EyeOff size={16} /> : <Eye size={16} />}
+                  {cardsRevealed ? '盖牌' : '看牌'}
                 </button>
               )}
             </div>

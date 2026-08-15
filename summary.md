@@ -215,7 +215,7 @@ AntigravityTest/
 | Header | 牌桌ID + 退出按钮 + 当前轮次指示器（含位置标签） |
 | 对手区 | 对手信息卡片（位置/筹码/下注/状态/底牌展示，掉线时显示 `[🔴 掉线中]` 并置灰） |
 | 公共区 | 底池 + 公共牌 + 当前阶段 |
-| Row 1 | 玩家底牌（默认盖牌，点击"看牌"亮3秒） |
+| Row 1 | 玩家底牌（默认盖牌，点击“看牌 / 盖牌”切换显示状态） |
 | Row 2 | 筹码余额 + 本轮下注 + 剩余买入次数 + 等待区准备状态 |
 | Row 3 | 等待阶段显示准备/取消准备/开始发牌；对局阶段显示弃牌 + 过牌/跟注 |
 | Row 4 | 加注滑块（左端合法最小加注、右端 ALL-IN）+ 金额确认按钮 |
@@ -226,7 +226,7 @@ AntigravityTest/
 - 结算弹窗（赢家信息 + 底牌揭晓 + 弃牌赢时的亮牌/藏牌按钮；每个客户端独立关闭，准备不会关闭其他玩家的结算）
 - 终极赢家弹窗（全桌淘汰后的特殊金色弹窗）
 
-**看牌功能**: 底牌默认显示为红黑简约牌背，点击"👀 看牌"按钮亮牌3秒后自动翻回
+**看牌功能**: 底牌默认显示为红黑简约牌背，点击“看牌”持续显示，再点击“盖牌”随时切回牌背
 
 ### 6.4 Tutorial.tsx - 教程组件
 
@@ -403,7 +403,7 @@ AntigravityTest/
 19. ✅ 底部操作区改为四排布局（底牌 / 筹码信息 / 弃牌跟注 / 加注ALL-IN）
 
 ### 看牌功能
-20. ✅ 底牌默认盖住，点击"看牌"按钮亮出3秒后自动翻回
+20. ✅ 底牌默认盖住，点击“看牌 / 盖牌”按钮可随时切换显示状态
 
 ### 弃牌获胜亮牌
 21. ✅ 全桌弃牌后赢家可选择展示或隐藏底牌
@@ -500,3 +500,4 @@ AntigravityTest/
 | 2026-08-15 | 修复庄位、盲位和翻后行动顺序；增加 2-8 人位置标签、8 人满桌限制及规则回归测试 | `backend/main.py`, `backend/poker_logic/game.py`, `backend/poker_logic/game_state.py`, `backend/tests/test_turn_order.py`, `frontend/src/components/Lobby.tsx`, `frontend/src/components/PokerTable.tsx`, `frontend/src/index.css`, `README.md`, `summary.md` |
 | 2026-08-15 | 将快捷加注按钮和数字输入框替换为移动端加注滑块，左端为合法最小值、右端为 ALL-IN，并在每次轮到玩家时重置到最小值 | `frontend/src/components/PokerTable.tsx`, `frontend/src/index.css`, `README.md`, `summary.md` |
 | 2026-08-15 | 保留 SHOWDOWN 直到全员准备开局，各客户端独立关闭结算；破产玩家确认结果后再显示破产弹窗，并优化手机端结算按钮布局 | `backend/poker_logic/game.py`, `backend/tests/test_turn_order.py`, `frontend/src/components/PokerTable.tsx`, `frontend/src/index.css`, `README.md`, `summary.md` |
+| 2026-08-15 | 看牌改为手动状态切换，取消3秒自动盖牌，并增加明确的看牌/盖牌按钮 | `PokerTable.tsx`, `Tutorial.tsx`, `index.css`, `README.md`, `summary.md` |
