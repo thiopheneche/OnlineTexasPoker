@@ -218,7 +218,7 @@ AntigravityTest/
 | Row 1 | 玩家底牌（默认盖牌，点击"看牌"亮3秒） |
 | Row 2 | 筹码余额 + 本轮下注 + 剩余买入次数 + 等待区准备状态 |
 | Row 3 | 等待阶段显示准备/取消准备/开始发牌；对局阶段显示弃牌 + 过牌/跟注 |
-| Row 4 | 预设加注(最小/2x/3x/½底池/满底池) + 手动输入 + 加注确认 + ALL-IN |
+| Row 4 | 加注滑块（左端合法最小加注、右端 ALL-IN）+ 金额确认按钮 |
 | 聊天 | 右下角浮动按钮 + 滑出聊天面板（未读计数/Enter发送/100条缓存；开关聊天面板不再重连牌桌 WebSocket） |
 
 **弹窗**：
@@ -391,6 +391,7 @@ AntigravityTest/
 19. ✅ 加注增加自定义金额输入框（放在滑块旁边）
 20. ✅ 增加快捷预设按钮（最小/2x/3x/½底池/满底池）
 21. ✅ 移除滑块，只保留预设和自定义输入
+22. ✅ 面向手机操作重新改为单一加注滑块，移除快捷预设和数字输入框；滑块右端直接确认 ALL-IN
 
 
 ### 响应式适配
@@ -496,3 +497,4 @@ AntigravityTest/
 | 2026-05-15 | 加强手机端 UI 防截断方案：牌桌内部滚动、弹窗与聊天面板移动端宽高约束、登录页和大厅移动端约束 | `frontend/src/index.css`, `frontend/src/App.tsx`, `frontend/src/components/Lobby.tsx`, `frontend/src/components/PokerTable.tsx`, `summary.md` |
 | 2026-05-15 | 按部署流程推送 `online-edition` 并更新 VPS：拉取代码、重启 `texas-poker`、重新构建前端并覆盖 `/var/www/texas_poker/` | `summary.md`, `README.md`, `backend/main.py`, `frontend/src/*` |
 | 2026-08-15 | 修复庄位、盲位和翻后行动顺序；增加 2-8 人位置标签、8 人满桌限制及规则回归测试 | `backend/main.py`, `backend/poker_logic/game.py`, `backend/poker_logic/game_state.py`, `backend/tests/test_turn_order.py`, `frontend/src/components/Lobby.tsx`, `frontend/src/components/PokerTable.tsx`, `frontend/src/index.css`, `README.md`, `summary.md` |
+| 2026-08-15 | 将快捷加注按钮和数字输入框替换为移动端加注滑块，左端为合法最小值、右端为 ALL-IN，并在每次轮到玩家时重置到最小值 | `frontend/src/components/PokerTable.tsx`, `frontend/src/index.css`, `README.md`, `summary.md` |

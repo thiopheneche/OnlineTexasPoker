@@ -73,6 +73,7 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const leavingRef = useRef(false);
   const chatOpenRef = useRef(false);
+  const lastRaiseTurnKeyRef = useRef('');
 
   useEffect(() => {
     chatOpenRef.current = chatOpen;
@@ -92,7 +93,19 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
             setUnreadCount(prev => prev + 1);
           }
         } else {
-          setGameState(data as GameState);
+          const nextState = data as GameState;
+          const nextTurnPlayer = nextState.players[nextState.current_turn_index];
+          const nextTurnKey = `${nextState.phase}:${nextTurnPlayer?.id || ''}`;
+          if (nextTurnKey !== lastRaiseTurnKeyRef.current) {
+            lastRaiseTurnKeyRef.current = nextTurnKey;
+            if (nextTurnPlayer?.id === clientId) {
+              const nextMe = nextState.players.find(player => player.id === clientId);
+              const nextMinRaise = nextState.current_highest_bet + nextState.min_raise;
+              const nextMaxRaise = nextMe ? nextMe.chips + nextMe.current_bet : 0;
+              setRaiseAmount(Math.min(nextMinRaise, nextMaxRaise));
+            }
+          }
+          setGameState(nextState);
         }
       } catch (e) { console.error("Failed to parse", e); }
     };
@@ -178,7 +191,14 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
 
   const me = gameState?.players.find(p => p.id === clientId);
   const currentTurnPlayer = gameState?.players[gameState.current_turn_index] || null;
-  const derivedRaiseAmount = gameState ? gameState.current_highest_bet + gameState.min_raise : 0;
+  const minRaiseTotal = gameState ? gameState.current_highest_bet + gameState.min_raise : 0;
+  const maxRaiseTotal = me ? me.chips + me.current_bet : 0;
+  const sliderMin = Math.min(minRaiseTotal, maxRaiseTotal);
+  const effectiveRaiseAmount = Math.min(Math.max(raiseAmount || sliderMin, sliderMin), maxRaiseTotal);
+  const isAllInSelected = maxRaiseTotal > 0 && effectiveRaiseAmount >= maxRaiseTotal;
+  const raiseProgress = maxRaiseTotal > sliderMin
+    ? ((effectiveRaiseAmount - sliderMin) / (maxRaiseTotal - sliderMin)) * 100
+    : 100;
 
   const isBankrupt = me && me.chips === 0 && (gameState?.phase === "WAITING" || gameState?.phase === "SHOWDOWN");
   const shouldShowBankruptModal = Boolean(isBankrupt && !isSpectating);
@@ -219,17 +239,8 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
   const canCheck = me && (me.current_bet === gameState.current_highest_bet);
   const disableControls = !isMyTurn || isWaitingOrShowdown;
   const showSettlement = gameState.phase === "SHOWDOWN" && gameState.showdown_results && gameState.showdown_results.length > 0;
-  const minRaiseTotal = gameState.current_highest_bet + gameState.min_raise;
-  const maxRaiseTotal = me ? me.chips + me.current_bet : 0;
-  const effectiveRaiseAmount = Math.min(Math.max(raiseAmount || derivedRaiseAmount, minRaiseTotal), Math.max(minRaiseTotal, maxRaiseTotal));
   const showRunTwiceBoards = gameState.run_it_twice === 2 && gameState.run_twice_boards.length === 2 && gameState.run_twice_boards.some(board => board.length > 0);
   const runTwiceBaseCount = gameState.community_cards.length;
-
-  const presetBtnStyle: React.CSSProperties = {
-    padding: '3px 8px', fontSize: '0.75rem', background: 'rgba(255,255,255,0.15)',
-    color: '#ccc', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '6px',
-    cursor: 'pointer', whiteSpace: 'nowrap'
-  };
 
   return (
     <div className="poker-table-container poker-table-screen" style={{ position: 'relative' }}>
@@ -706,25 +717,39 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
                   )}
                 </div>
 
-                {/* Row 4: 预设加注 + 自定义输入 + 加注按钮 + ALL-IN */}
-                <div className="raise-actions-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.6vh 2vw', flexWrap: 'wrap', opacity: disableControls ? 0.3 : 1, pointerEvents: disableControls ? 'none' : 'auto' }}>
-                  <button onClick={() => setRaiseAmount(minRaiseTotal)} style={presetBtnStyle}>最小</button>
-                  <button onClick={() => setRaiseAmount(Math.min(gameState.current_highest_bet * 2, maxRaiseTotal))} style={presetBtnStyle}>2x</button>
-                  <button onClick={() => setRaiseAmount(Math.min(gameState.current_highest_bet * 3, maxRaiseTotal))} style={presetBtnStyle}>3x</button>
-                  <button onClick={() => setRaiseAmount(Math.min(Math.floor(gameState.pot / 2) + gameState.current_highest_bet, maxRaiseTotal))} style={presetBtnStyle}>½底池</button>
-                  <button onClick={() => setRaiseAmount(Math.min(gameState.pot + gameState.current_highest_bet, maxRaiseTotal))} style={presetBtnStyle}>满底池</button>
-                  <input
-                    type="number" min={minRaiseTotal} max={maxRaiseTotal} value={effectiveRaiseAmount}
-
-                    onChange={(e) => { const v = Number(e.target.value); if (!isNaN(v)) setRaiseAmount(v); }}
-                    style={{ width: '70px', padding: '4px 6px', background: 'rgba(0,0,0,0.5)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '6px', fontSize: 'clamp(0.7rem, 1.1vw, 0.9rem)', textAlign: 'center', outline: 'none' }}
-                  />
-                  <button className="btn-bet" onClick={() => handleAction("raise", effectiveRaiseAmount - me.current_bet)} disabled={effectiveRaiseAmount > maxRaiseTotal || effectiveRaiseAmount < minRaiseTotal} style={{ fontSize: 'clamp(0.7rem, 1.1vw, 0.9rem)' }}>
-                    <ArrowUpCircle size={14} /> 加注到 {effectiveRaiseAmount}
-
-                  </button>
-                  <button style={{ background: 'linear-gradient(135deg, #7b1fa2, #4a148c)', color: 'white', opacity: disableControls ? 0.3 : 1, cursor: disableControls ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: 'clamp(0.7rem, 1.1vw, 0.9rem)' }} disabled={disableControls} onClick={() => handleAction("all-in")}>
-                    🔥 ALL-IN
+                {/* Row 4: mobile-first raise slider + confirmation */}
+                <div className={`raise-actions-row${isAllInSelected ? ' all-in-selected' : ''}`} style={{ opacity: disableControls ? 0.3 : 1, pointerEvents: disableControls ? 'none' : 'auto' }}>
+                  <div className="raise-slider-control">
+                    <div className="raise-value-display">
+                      <span>{isAllInSelected ? 'ALL-IN' : '加注到'}</span>
+                      <strong>💰 {effectiveRaiseAmount}</strong>
+                    </div>
+                    <div className="raise-slider-labels" aria-hidden="true">
+                      <span>最小 {sliderMin}</span>
+                      <span>ALL-IN {maxRaiseTotal}</span>
+                    </div>
+                    <input
+                      className="raise-slider"
+                      type="range"
+                      min={sliderMin}
+                      max={maxRaiseTotal}
+                      step="1"
+                      value={effectiveRaiseAmount}
+                      aria-label={`加注金额，最小 ${sliderMin}，全押 ${maxRaiseTotal}`}
+                      disabled={disableControls || maxRaiseTotal <= 0}
+                      onChange={(event) => setRaiseAmount(Number(event.target.value))}
+                      style={{ '--raise-progress': `${raiseProgress}%` } as React.CSSProperties}
+                    />
+                  </div>
+                  <button
+                    className="raise-confirm-button"
+                    disabled={disableControls || maxRaiseTotal <= 0}
+                    onClick={() => isAllInSelected
+                      ? handleAction("all-in")
+                      : handleAction("raise", effectiveRaiseAmount - me.current_bet)}
+                  >
+                    <ArrowUpCircle size={17} />
+                    {isAllInSelected ? `确认 ALL-IN · ${maxRaiseTotal}` : `确认加注到 ${effectiveRaiseAmount}`}
                   </button>
                 </div>
               </>
