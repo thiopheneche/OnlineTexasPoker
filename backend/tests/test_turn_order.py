@@ -97,6 +97,31 @@ class TurnOrderTests(unittest.TestCase):
         self.assertEqual(state.current_turn_index, 2)
 
 class BettingRoundOrderTests(unittest.IsolatedAsyncioTestCase):
+    async def test_showdown_results_remain_until_every_player_is_ready(self):
+        state = make_state(3)
+        deck = Deck()
+        state.phase = GamePhase.SHOWDOWN
+        state.showdown_results = [{"name": "P0", "won": 30, "reason": "一对"}]
+
+        await PokerEngine.process_action(state, deck, "p0", "ready")
+
+        self.assertEqual(state.phase, GamePhase.SHOWDOWN)
+        self.assertEqual(state.showdown_results[0]["name"], "P0")
+        self.assertTrue(state.players[0].is_ready)
+        self.assertFalse(state.players[1].is_ready)
+
+        await PokerEngine.process_action(state, deck, "p0", "start")
+
+        self.assertEqual(state.phase, GamePhase.SHOWDOWN)
+        self.assertEqual(len(state.showdown_results), 1)
+
+        await PokerEngine.process_action(state, deck, "p1", "ready")
+        await PokerEngine.process_action(state, deck, "p2", "ready")
+        await PokerEngine.process_action(state, deck, "p0", "start")
+
+        self.assertEqual(state.phase, GamePhase.PREFLOP)
+        self.assertEqual(state.showdown_results, [])
+
     async def test_three_handed_order_advances_correctly_across_streets(self):
         state = make_state(3)
         deck = Deck()

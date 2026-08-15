@@ -222,8 +222,8 @@ AntigravityTest/
 | 聊天 | 右下角浮动按钮 + 滑出聊天面板（未读计数/Enter发送/100条缓存；开关聊天面板不再重连牌桌 WebSocket） |
 
 **弹窗**：
-- 破产弹窗（60秒倒计时 + 复活/观战/离桌选项）
-- 结算弹窗（赢家信息 + 底牌揭晓 + 弃牌赢时的亮牌/藏牌按钮）
+- 破产弹窗（结算结果确认后再显示，届时启动60秒倒计时 + 复活/观战/离桌选项）
+- 结算弹窗（赢家信息 + 底牌揭晓 + 弃牌赢时的亮牌/藏牌按钮；每个客户端独立关闭，准备不会关闭其他玩家的结算）
 - 终极赢家弹窗（全桌淘汰后的特殊金色弹窗）
 
 **看牌功能**: 底牌默认显示为红黑简约牌背，点击"👀 看牌"按钮亮牌3秒后自动翻回
@@ -438,6 +438,7 @@ AntigravityTest/
 32. ✅ 修复前端本地开发默认连接线上服务的问题，将 API / WebSocket 地址集中到 `config.ts`
 33. ✅ 修复聊天面板开关导致牌桌 WebSocket 重连的问题
 34. ✅ 修复多人桌庄位/盲位建模及翻后从数组首位行动的问题，恢复标准翻前/翻后顺序，并增加 2-8 人位置标注与 8 人上限
+35. ✅ 结算界面改为各玩家独立关闭；破产玩家先查看完整结算再进入破产处理，单人准备不再清空全桌结算
 
 ---
 
@@ -498,3 +499,4 @@ AntigravityTest/
 | 2026-05-15 | 按部署流程推送 `online-edition` 并更新 VPS：拉取代码、重启 `texas-poker`、重新构建前端并覆盖 `/var/www/texas_poker/` | `summary.md`, `README.md`, `backend/main.py`, `frontend/src/*` |
 | 2026-08-15 | 修复庄位、盲位和翻后行动顺序；增加 2-8 人位置标签、8 人满桌限制及规则回归测试 | `backend/main.py`, `backend/poker_logic/game.py`, `backend/poker_logic/game_state.py`, `backend/tests/test_turn_order.py`, `frontend/src/components/Lobby.tsx`, `frontend/src/components/PokerTable.tsx`, `frontend/src/index.css`, `README.md`, `summary.md` |
 | 2026-08-15 | 将快捷加注按钮和数字输入框替换为移动端加注滑块，左端为合法最小值、右端为 ALL-IN，并在每次轮到玩家时重置到最小值 | `frontend/src/components/PokerTable.tsx`, `frontend/src/index.css`, `README.md`, `summary.md` |
+| 2026-08-15 | 保留 SHOWDOWN 直到全员准备开局，各客户端独立关闭结算；破产玩家确认结果后再显示破产弹窗，并优化手机端结算按钮布局 | `backend/poker_logic/game.py`, `backend/tests/test_turn_order.py`, `frontend/src/components/PokerTable.tsx`, `frontend/src/index.css`, `README.md`, `summary.md` |

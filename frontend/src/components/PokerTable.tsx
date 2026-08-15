@@ -68,12 +68,14 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
   const [chatOpen, setChatOpen] = useState<boolean>(false);
   const [unreadCount, setUnreadCount] = useState<number>(0);
   const [cardsRevealed, setCardsRevealed] = useState<boolean>(false);
+  const [settlementDismissed, setSettlementDismissed] = useState<boolean>(false);
   const peekTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ws = useRef<WebSocket | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const leavingRef = useRef(false);
   const chatOpenRef = useRef(false);
   const lastRaiseTurnKeyRef = useRef('');
+  const previousPhaseRef = useRef('');
 
   useEffect(() => {
     chatOpenRef.current = chatOpen;
@@ -105,6 +107,10 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
               setRaiseAmount(Math.min(nextMinRaise, nextMaxRaise));
             }
           }
+          if (nextState.phase === "SHOWDOWN" && previousPhaseRef.current !== "SHOWDOWN") {
+            setSettlementDismissed(false);
+          }
+          previousPhaseRef.current = nextState.phase;
           setGameState(nextState);
         }
       } catch (e) { console.error("Failed to parse", e); }
@@ -200,8 +206,11 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
     ? ((effectiveRaiseAmount - sliderMin) / (maxRaiseTotal - sliderMin)) * 100
     : 100;
 
+  const hasSettlement = Boolean(gameState?.phase === "SHOWDOWN" && gameState.showdown_results?.length > 0);
   const isBankrupt = me && me.chips === 0 && (gameState?.phase === "WAITING" || gameState?.phase === "SHOWDOWN");
-  const shouldShowBankruptModal = Boolean(isBankrupt && !isSpectating);
+  const shouldShowBankruptModal = Boolean(
+    isBankrupt && !isSpectating && (!hasSettlement || settlementDismissed)
+  );
   const shouldShowVictory = Boolean(gameState && me && me.chips > 0 && gameState.players.length >= 2 && gameState.players.filter(p => p.id !== clientId).every(p => p.chips === 0 && p.revives_used >= 3 && ((gameState.phase === "WAITING" || gameState.phase === "SHOWDOWN") || !p.is_active)) && !victoryDismissed);
 
   useEffect(() => {
@@ -238,7 +247,7 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
   const allReady = readyPlayers.length >= 2 && readyPlayers.every(p => p.is_ready);
   const canCheck = me && (me.current_bet === gameState.current_highest_bet);
   const disableControls = !isMyTurn || isWaitingOrShowdown;
-  const showSettlement = gameState.phase === "SHOWDOWN" && gameState.showdown_results && gameState.showdown_results.length > 0;
+  const showSettlement = hasSettlement && !settlementDismissed;
   const showRunTwiceBoards = gameState.run_it_twice === 2 && gameState.run_twice_boards.length === 2 && gameState.run_twice_boards.some(board => board.length > 0);
   const runTwiceBaseCount = gameState.community_cards.length;
 
@@ -345,7 +354,7 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
       {/* 破产复活弹窗 */}
       {shouldShowBankruptModal && me && (
 
-        <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', zIndex: 10002, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div className="modal-card bankrupt-modal-card" style={{ background: '#1a1a1a', padding: '40px', borderRadius: '20px', border: '2px solid var(--danger)', textAlign: 'center', width: '400px' }}>
             <h1 style={{ color: 'var(--danger)', marginBottom: '10px' }}>💔 您已破产</h1>
             <p style={{ color: 'var(--text-muted)', marginBottom: '30px' }}>
@@ -405,8 +414,8 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
       )}
 
       {/* 结算弹窗 */}
-      {showSettlement && (!isBankrupt || isSpectating) && !shouldShowVictory && (
-        <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      {showSettlement && !shouldShowVictory && (
+        <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', zIndex: 10001, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div className="modal-card settlement-modal-card" style={{ background: '#111', padding: '40px', borderRadius: '20px', border: '2px solid gold', textAlign: 'center', minWidth: '500px', boxShadow: '0 10px 40px rgba(255, 215, 0, 0.2)', maxHeight: '90vh', overflowY: 'auto' }}>
             <h1 style={{ color: 'gold', margin: '0 0 30px 0', fontSize: '2.5rem', textShadow: '0 2px 10px rgba(255, 215, 0, 0.3)' }}>🏆 巅峰决战 🏆</h1>
 
@@ -503,10 +512,28 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
               </div>
             )}
 
-            <div style={{ display: 'flex', gap: '20px', justifyContent: 'center', marginTop: '10px' }}>
-              {me && me.chips > 0 && (
-                <button className="btn-start" style={{ padding: '15px 40px', fontSize: '1.2rem', letterSpacing: '2px', boxShadow: '0 5px 15px rgba(76, 175, 80, 0.4)' }} onClick={() => handleAction(me.is_ready ? "unready" : "ready")}>
-                  <Play size={20} /> {me.is_ready ? '取消准备' : '准备下一局'}
+            <div className="settlement-actions" style={{ display: 'flex', gap: '20px', justifyContent: 'center', marginTop: '10px' }}>
+              {isBankrupt ? (
+                <button
+                  className="btn-start"
+                  style={{ padding: '15px 40px', fontSize: '1.1rem', boxShadow: '0 5px 15px rgba(76, 175, 80, 0.35)' }}
+                  onClick={() => {
+                    setSettlementDismissed(true);
+                    setBankruptTimer(60);
+                  }}
+                >
+                  <Play size={20} /> 查看完毕，处理破产
+                </button>
+              ) : me && me.chips > 0 && (
+                <button
+                  className="btn-start"
+                  style={{ padding: '15px 40px', fontSize: '1.2rem', letterSpacing: '2px', boxShadow: '0 5px 15px rgba(76, 175, 80, 0.4)' }}
+                  onClick={() => {
+                    if (!me.is_ready) handleAction("ready");
+                    setSettlementDismissed(true);
+                  }}
+                >
+                  <Play size={20} /> {me.is_ready ? '继续等待下一局' : '准备下一局'}
                 </button>
               )}
               <button onClick={handleLeaveTable} style={{ padding: '15px 40px', fontSize: '1.2rem', background: 'transparent', border: '1px solid gray', color: 'gray', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -575,7 +602,7 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
                   </span>
                   <span>💰 {p.chips} | 注: {p.current_bet}</span>
                   <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                    ❤️ 剩余买入: {3 - p.revives_used}{gameState.phase === "WAITING" ? ` | ${p.is_ready ? '✅ 已准备' : '⏳ 未准备'}` : ''}
+                    ❤️ 剩余买入: {3 - p.revives_used}{isWaitingOrShowdown ? ` | ${p.is_ready ? '✅ 已准备' : '⏳ 未准备'}` : ''}
                   </span>
                 </div>
 
@@ -670,10 +697,10 @@ export const PokerTable: React.FC<Props> = ({ tableId, clientId, onLeave }) => {
               <span style={{ color: 'var(--text-muted)' }}>筹码: <strong style={{ color: '#ffd700' }}>💰 {me.chips}</strong></span>
               <span style={{ color: 'var(--text-muted)' }}>本轮下注: <strong style={{ color: 'white' }}>💰 {me.current_bet}</strong></span>
               <span style={{ color: 'var(--text-muted)' }}>❤️ 剩余买入: <strong style={{ color: 'var(--accent)' }}>{3 - me.revives_used}</strong></span>
-              {gameState.phase === "WAITING" && <span style={{ color: me.is_ready ? '#4caf50' : 'var(--text-muted)' }}>{me.is_ready ? '✅ 你已准备' : '⏳ 你未准备'}</span>}
+              {isWaitingOrShowdown && <span style={{ color: me.is_ready ? '#4caf50' : 'var(--text-muted)' }}>{me.is_ready ? '✅ 你已准备' : '⏳ 你未准备'}</span>}
             </div>
 
-            {gameState.phase === "WAITING" ? (
+            {isWaitingOrShowdown ? (
               <div className="waiting-actions-row" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px', padding: '1vh 2vw', flexWrap: 'wrap' }}>
                 <button
                   className="btn-start"
