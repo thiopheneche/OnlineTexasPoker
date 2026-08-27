@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { Spade, ArrowRight, AlertCircle } from 'lucide-react';
 import { PokerTable } from './components/PokerTable';
 import { Lobby } from './components/Lobby';
 import { DisclaimerModal } from './components/Disclaimer';
@@ -105,32 +106,39 @@ function App() {
 
   if (!username) {
     return (
-      <div className="app-main flex-center" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div className="login-card" style={{ background: '#1a1a1a', padding: '50px', borderRadius: '20px', border: '2px solid var(--accent)', textAlign: 'center', width: '450px', boxShadow: '0px 10px 40px rgba(0,0,0,0.5)' }}>
-          <h1 style={{ color: 'var(--accent)', marginBottom: '10px', fontSize: '2.5rem' }}>♠️ 德州扑克 ♣️</h1>
-          <p style={{ color: 'var(--text-muted)', marginBottom: '30px' }}>请输入您的唯一游戏 ID 以进入大厅</p>
-          <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-             <input
-               type="text"
-               placeholder="输入昵称 (如: Player1)"
-               value={loginInput}
-               onChange={(e) => { setLoginInput(e.target.value); setLoginError(''); }}
-               style={{ padding: '15px', borderRadius: '10px', border: '1px solid #333', background: '#2a2a2a', color: 'white', fontSize: '1.2rem', textAlign: 'center', outline: 'none' }}
-               maxLength={12}
-             />
-             {loginError && <div style={{ color: 'var(--danger)', fontSize: '0.95rem' }}>⚠️ {loginError}</div>}
-             <button type="submit" style={{ padding: '15px', background: 'var(--accent)', color: 'white', border: 'none', borderRadius: '10px', fontSize: '1.2rem', cursor: 'pointer', fontWeight: 'bold', transition: 'background 0.2s' }}>
-               进入大厅 (Enter)
-             </button>
-          </form>
-          <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'center', gap: '16px', flexWrap: 'wrap' }}>
-            <TutorialModal variant="site" trigger="link" />
-            <DisclaimerModal trigger="link" />
-          </div>
-          <p style={{ fontSize: '0.8rem', color: 'gray', marginTop: '15px', lineHeight: '1.5' }}>
-              注：登录 ID 与全局筹码会保存在当前浏览器中，刷新页面后不会自动登录。
+      <div className="app-main">
+        <div className="a-login">
+          <div className="a-login-inner">
+            <div className="a-logo"><Spade size={30} /></div>
+            <h1>德州扑克</h1>
+            <p className="sub">和朋友来一局</p>
 
-          </p>
+            <form onSubmit={handleLogin}>
+              <input
+                type="text"
+                placeholder="输入你的游戏 ID"
+                value={loginInput}
+                onChange={(e) => { setLoginInput(e.target.value); setLoginError(''); }}
+                maxLength={12}
+                autoFocus
+              />
+              {loginError && (
+                <div className="a-login-error">
+                  <AlertCircle size={15} style={{ flexShrink: 0 }} />
+                  <span>{loginError}</span>
+                </div>
+              )}
+              <button type="submit" className="a-primary" disabled={!loginInput.trim()}>
+                进入大厅 <ArrowRight size={17} />
+              </button>
+            </form>
+
+            <div className="a-login-links">
+              <TutorialModal variant="site" trigger="link" />
+              <DisclaimerModal trigger="link" />
+            </div>
+            <p className="a-login-note">刷新页面不会自动登录，重新输入相同 ID 即可续回原牌桌。</p>
+          </div>
         </div>
       </div>
     );

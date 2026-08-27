@@ -9,6 +9,9 @@ __pycache__/
 *.pyc
 *.pyo
 
+# 后端账号数据（每个环境各自持有，绝不能跟随代码同步覆盖线上玩家筹码）
+backend/data/
+
 # Node
 node_modules/
 dist/
