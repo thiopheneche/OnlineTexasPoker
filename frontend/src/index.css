@@ -256,7 +256,8 @@ button, input { font-family: inherit; }
   gap: 8px;
 }
 .a-primary:active { transform: scale(0.985); }
-.a-primary:disabled { opacity: 0.45; cursor: not-allowed; }
+/* 未填 ID 时按钮不可用，但保持足够可读，避免首屏主按钮看起来是坏的 */
+.a-primary:disabled { opacity: 0.62; cursor: not-allowed; }
 .a-login-error {
   display: flex;
   align-items: center;

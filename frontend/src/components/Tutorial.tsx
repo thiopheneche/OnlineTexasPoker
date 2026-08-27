@@ -154,11 +154,13 @@ export const TutorialModal: React.FC<Props> = ({ variant, trigger }) => {
           style={{
             color: 'var(--accent, #03dac6)',
             cursor: 'pointer',
-            textDecoration: 'underline',
             fontSize: '0.85rem',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '5px',
           }}
         >
-          教程文档
+          <BookOpen size={14} /> {variant === 'rules' ? '玩法规则' : '新手教程'}
         </span>
       )}
 

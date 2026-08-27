@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Shield } from 'lucide-react';
 
 type Props = {
   trigger: 'banner' | 'link';
@@ -88,11 +89,13 @@ export const DisclaimerModal: React.FC<Props> = ({ trigger }) => {
           style={{
             color: 'var(--danger, #cf6679)',
             cursor: 'pointer',
-            textDecoration: 'underline',
             fontSize: '0.85rem',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '5px',
           }}
         >
-          ⚖️ 反赌博声明及免责声明
+          <Shield size={14} /> 免责声明
         </span>
       )}
 
