@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, LogIn, RefreshCcw, Users, Gem, LogOut, Spade, MoreHorizontal, AlertCircle } from 'lucide-react';
+import { Plus, LogIn, RefreshCcw, Users, Gem, LogOut, Spade, MoreHorizontal, AlertCircle, KeyRound, Copy, Check } from 'lucide-react';
 import { DisclaimerModal } from './Disclaimer';
 import { TutorialModal } from './Tutorial';
 import { API_BASE } from '../config';
@@ -58,6 +58,8 @@ export const Lobby: React.FC<Props> = ({ onJoinTable, onLogout, username, global
   const [chipError, setChipError] = useState<string>('');
   const [menuOpen, setMenuOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [recoveryCode, setRecoveryCode] = useState<string>('');
+  const [recoveryCopied, setRecoveryCopied] = useState(false);
   const reconnectTableId = localStorage.getItem(STORAGE_TABLE_KEY)?.trim() || '';
   const reconnectTableExists = reconnectTableId ? tables.some(table => table.table_id === reconnectTableId) : false;
 
@@ -65,8 +67,8 @@ export const Lobby: React.FC<Props> = ({ onJoinTable, onLogout, username, global
     setLoading(true);
     try {
       const [tablesRes, usersRes] = await Promise.all([
-        fetch(`${API_BASE}/api/tables`),
-        fetch(`${API_BASE}/api/users`)
+        fetch(`${API_BASE}/api/tables`, { credentials: 'include' }),
+        fetch(`${API_BASE}/api/users`, { credentials: 'include' })
       ]);
 
       if (tablesRes.ok) {
@@ -112,6 +114,7 @@ export const Lobby: React.FC<Props> = ({ onJoinTable, onLogout, username, global
     try {
       const res = await fetch(`${API_BASE}/api/tables`, {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ small_blind: smallBlind, big_blind: bigBlind, buy_in: buyIn, username })
       });
@@ -136,6 +139,7 @@ export const Lobby: React.FC<Props> = ({ onJoinTable, onLogout, username, global
     try {
       const res = await fetch(`${API_BASE}/api/tables/join/${tableId}`, {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username })
       });
@@ -150,6 +154,23 @@ export const Lobby: React.FC<Props> = ({ onJoinTable, onLogout, username, global
       }
     } catch (e) {
       console.error('Failed to join table', e);
+    }
+  };
+
+  const handleIssueRecovery = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/recovery/issue`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+      const data = await res.json();
+      if (data.success) {
+        setRecoveryCode(data.code);
+        setRecoveryCopied(false);
+        setMenuOpen(false);
+      }
+    } catch (e) {
+      console.error('Failed to issue recovery code', e);
     }
   };
 
@@ -276,6 +297,9 @@ export const Lobby: React.FC<Props> = ({ onJoinTable, onLogout, username, global
             <button onClick={() => { void fetchTables(); setMenuOpen(false); }}>
               <RefreshCcw size={16} className={loading ? 'animate-spin' : ''} /> 刷新牌桌
             </button>
+            <button onClick={handleIssueRecovery}>
+              <KeyRound size={16} /> 账号恢复码
+            </button>
             <div className="a-menu-item"><TutorialModal variant="site" trigger="link" /></div>
             <div className="a-menu-item"><DisclaimerModal trigger="link" /></div>
             <button className="danger" onClick={() => { setMenuOpen(false); onLogout(); }}>
@@ -284,6 +308,34 @@ export const Lobby: React.FC<Props> = ({ onJoinTable, onLogout, username, global
             <div className="menu-note">
               新玩家初始 5 枚全局筹码，进桌 / 建桌各消耗 1 枚；离桌时手中筹码每满一个买入额返还 1 枚。
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 恢复码：暂时没有邮箱，这是换设备找回账号的唯一手段 */}
+      {recoveryCode && (
+        <div className="a-sheet-mask" onClick={(e) => { if (e.target === e.currentTarget) setRecoveryCode(''); }}>
+          <div className="a-sheet">
+            <h3>账号恢复码</h3>
+            <p className="sub">
+              换设备、或清掉浏览器数据后，用这串码就能登录回 <b>{username}</b> 并取回筹码。
+              请自己保存好 —— 关掉后无法再次查看，只能重新生成（旧码会失效）。
+            </p>
+            <div className="a-recovery-code">{recoveryCode}</div>
+            <button
+              className="a-primary"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(recoveryCode);
+                  setRecoveryCopied(true);
+                } catch {
+                  setRecoveryCopied(false);
+                }
+              }}
+            >
+              {recoveryCopied ? <><Check size={17} /> 已复制</> : <><Copy size={17} /> 复制恢复码</>}
+            </button>
+            <button className="ghost" onClick={() => setRecoveryCode('')}>我已保存</button>
           </div>
         </div>
       )}

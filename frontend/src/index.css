@@ -292,6 +292,34 @@ button, input { font-family: inherit; }
   color: rgba(255, 255, 255, 0.26);
   line-height: 1.7;
 }
+.a-login-switch {
+  margin-top: 14px;
+  min-height: 44px;
+  padding: 0 12px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.a-login-switch:hover { color: var(--accent); }
+
+/* 恢复码 */
+.a-recovery-code {
+  margin: 4px 0 20px;
+  padding: 18px 14px;
+  border: 1px dashed rgba(255, 215, 0, 0.45);
+  border-radius: var(--radius-m);
+  background: var(--gold-dim);
+  color: var(--gold-soft);
+  font-family: var(--num-font);
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-align: center;
+  word-break: break-all;
+  user-select: all;
+}
 
 /* ============================================================
    大厅

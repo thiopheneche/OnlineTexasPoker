@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Dict, Set, Any, Optional
 import json
@@ -11,16 +11,38 @@ from pydantic import BaseModel
 from poker_logic.game_state import GameState, GamePhase, Player
 from poker_logic.deck import Deck
 from poker_logic.game import PokerEngine
+import store
 
 app = FastAPI()
 
+# 会话改用 httpOnly cookie 之后，allow_origins=["*"] + allow_credentials=True
+# 等于允许任意站点带着用户凭据调用本 API，必须收敛成显式白名单。
+# 线上前后端同源（nginx 反代 /api 与 /ws），CORS 只在本地开发时才用得上。
+ALLOWED_ORIGINS = [
+    "https://texaspoker.thiopheneche.dpdns.org",
+    "http://localhost:5173",
+    "http://localhost:5180",
+    "http://localhost:6666",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:5180",
+    "http://127.0.0.1:6666",
+]
+_extra_origins = os.environ.get("POKER_ALLOWED_ORIGINS", "")
+if _extra_origins:
+    ALLOWED_ORIGINS.extend(o.strip() for o in _extra_origins.split(",") if o.strip())
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+SESSION_COOKIE = "poker_session"
+
+# 启动时就建库并完成 users.json 迁移，而不是等第一个请求触发
+store.connect()
 
 tables: Dict[str, GameState] = {}
 decks: Dict[str, Deck] = {}
@@ -65,85 +87,67 @@ active_users: Set[str] = set()
 disconnected_users: Dict[str, float] = {}
 disconnect_tasks: Dict[str, asyncio.Task] = {}
 
-# --- Persistent Users Data ---
-DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
-USERS_FILE = os.path.join(DATA_DIR, "users.json")
-ACCOUNT_TTL_SECONDS = 24 * 60 * 60
-
-def normalize_user_record(username: str, data: Any, now: Optional[float] = None) -> Dict[str, Any]:
-    timestamp = now if now is not None else time.time()
-    if isinstance(data, dict):
-        chips = int(data.get("global_chips", 5))
-        last_login_at = float(data.get("last_login_at", timestamp))
-        return {"global_chips": chips, "last_login_at": last_login_at}
-    return {"global_chips": int(data), "last_login_at": timestamp}
-
-def load_users() -> Dict[str, Dict[str, Any]]:
-    if not os.path.exists(DATA_DIR):
-        os.makedirs(DATA_DIR)
-    if os.path.exists(USERS_FILE):
-        try:
-            with open(USERS_FILE, "r", encoding="utf-8") as f:
-                raw_data = json.load(f)
-                now = time.time()
-                if isinstance(raw_data, dict):
-                    return {
-                        username: normalize_user_record(username, user_data, now)
-                        for username, user_data in raw_data.items()
-                    }
-        except Exception:
-            pass
-    return {}
-
-def save_users(users_data: Dict[str, Dict[str, Any]]):
-    if not os.path.exists(DATA_DIR):
-        os.makedirs(DATA_DIR)
-    with open(USERS_FILE, "w", encoding="utf-8") as f:
-        json.dump(users_data, f, ensure_ascii=False, indent=2)
-
-user_accounts: Dict[str, Dict[str, Any]] = load_users()
-
-def save_accounts():
-    save_users(user_accounts)
+# --- 账号与会话（SQLite，见 store.py）---
+# 下面几个函数保留了原来的「按用户名操作」签名，牌局逻辑无需改动；
+# 内部统一走 store，把用户名解析成 user_id 之后再读写筹码。
 
 def purge_expired_accounts(now: Optional[float] = None):
-    current_time = now if now is not None else time.time()
-    expired_usernames = [
-        username
-        for username, account in user_accounts.items()
-        if current_time - float(account.get("last_login_at", 0)) > ACCOUNT_TTL_SECONDS
-        and username not in active_users
-    ]
-    if not expired_usernames:
-        return
-    for username in expired_usernames:
-        user_accounts.pop(username, None)
-        disconnected_users.pop(username, None)
-    save_accounts()
+    store.purge_expired(active_usernames=active_users, now=now)
 
 def ensure_account(username: str, now: Optional[float] = None) -> Dict[str, Any]:
-    current_time = now if now is not None else time.time()
-    purge_expired_accounts(current_time)
-    account = user_accounts.get(username)
-    if account is None:
-        account = {"global_chips": 5, "last_login_at": current_time}
-        user_accounts[username] = account
-        save_accounts()
-    return account
+    """按用户名取账号，不存在则建一个访客账号。"""
+    user = store.get_user_by_name(username)
+    if user is None:
+        user = store.create_guest(username, now)
+    return user
 
 def update_last_login(username: str, now: Optional[float] = None):
-    current_time = now if now is not None else time.time()
-    account = ensure_account(username, current_time)
-    account["last_login_at"] = current_time
-    save_accounts()
+    user = ensure_account(username, now)
+    store.touch_login(user["user_id"], now)
 
 def get_global_chips(username: str) -> int:
-    return int(user_accounts.get(username, {}).get("global_chips", 0))
+    user = store.get_user_by_name(username)
+    return int(user["global_chips"]) if user else 0
 
 def set_global_chips(username: str, chips: int):
-    account = ensure_account(username)
-    account["global_chips"] = chips
-    save_accounts()
+    user = ensure_account(username)
+    store.set_chips(user["user_id"], chips)
+
+def add_global_chips(username: str, delta: int) -> int:
+    user = ensure_account(username)
+    new_total = int(user["global_chips"]) + int(delta)
+    store.set_chips(user["user_id"], new_total)
+    return new_total
+
+# --- 会话辅助 ---
+
+def current_user(request: Request) -> Optional[Dict[str, Any]]:
+    return store.resolve_session(request.cookies.get(SESSION_COOKIE))
+
+def ws_user(websocket: WebSocket) -> Optional[Dict[str, Any]]:
+    return store.resolve_session(websocket.cookies.get(SESSION_COOKIE))
+
+def set_session_cookie(response: Response, request: Request, raw_token: str):
+    # 本地开发走 http，Secure cookie 会被浏览器丢弃；线上经 nginx 反代是 https。
+    forwarded_proto = request.headers.get("x-forwarded-proto", "")
+    is_https = forwarded_proto == "https" or request.url.scheme == "https"
+    response.set_cookie(
+        key=SESSION_COOKIE,
+        value=raw_token,
+        max_age=store.SESSION_TTL_SECONDS,
+        httponly=True,
+        secure=is_https,
+        samesite="lax",
+        path="/",
+    )
+
+def public_user(user: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "username": user["username"],
+        "global_chips": user["global_chips"],
+        "is_guest": user["is_guest"],
+        "has_recovery_code": user["has_recovery_code"],
+    }
 
 class CreateTableRequest(BaseModel):
     small_blind: int = 5
@@ -154,24 +158,97 @@ class CreateTableRequest(BaseModel):
 class LoginRequest(BaseModel):
     username: str
 
+class RecoveryRequest(BaseModel):
+    code: str
+
+@app.get("/api/session")
+async def get_session(request: Request):
+    """页面加载时调一次：cookie 有效就直接登录，实现「关掉再打开还是我」。"""
+    user = current_user(request)
+    if user is None:
+        return {"success": False}
+    store.touch_login(user["user_id"])
+    return {"success": True, **public_user(user)}
+
+@app.post("/api/logout")
+async def logout(request: Request, response: Response):
+    store.delete_session(request.cookies.get(SESSION_COOKIE))
+    response.delete_cookie(SESSION_COOKIE, path="/")
+    return {"success": True}
+
 @app.post("/api/login")
-async def login(req: LoginRequest):
+async def login(req: LoginRequest, request: Request, response: Response):
     now = time.time()
     purge_expired_accounts(now)
-    if req.username in active_users:
+
+    username = req.username.strip()
+    if not username:
+        return {"success": False, "error": "请输入游戏 ID"}
+    if len(username) > 12:
+        return {"success": False, "error": "游戏 ID 最长 12 个字符"}
+
+    # 本设备已经登录过同一个账号：直接续用，不重复建号
+    existing = current_user(request)
+    if existing is not None and existing["username"].lower() == username.lower():
+        store.touch_login(existing["user_id"], now)
+        return {"success": True, **public_user(existing)}
+
+    if username in active_users:
         return {"success": False, "error": "该 ID 当前已在线，请换一个名称"}
-    
-    if req.username in disconnected_users:
-        if now - disconnected_users[req.username] < 60:
-            pass
-            
-    account = ensure_account(req.username, now)
-    update_last_login(req.username, now)
-        
-    return {"success": True, "global_chips": account["global_chips"]}
+
+    account = store.get_user_by_name(username)
+    if account is None:
+        account = store.create_guest(username, now)
+    elif account["claimed"]:
+        # 已被某台设备认领：没有凭据就不能再顶替，这正是原来能白拿别人筹码的口子
+        return {
+            "success": False,
+            "error": "该 ID 已被其他设备使用。换一个 ID，或用原设备的账号恢复码登录。",
+        }
+    else:
+        # 老数据迁移过来的未认领账号，第一个登录的设备接管它（保持老玩家的筹码）
+        store.claim_user(account["user_id"], now)
+        account = store.get_user_by_id(account["user_id"])
+
+    store.touch_login(account["user_id"], now)
+    if existing is not None:
+        store.delete_session(request.cookies.get(SESSION_COOKIE))
+    token = store.create_session(account["user_id"], now)
+    set_session_cookie(response, request, token)
+    return {"success": True, **public_user(account)}
+
+@app.post("/api/recovery/issue")
+async def issue_recovery(request: Request):
+    """给当前账号生成恢复码。只在这里返回一次，库里只存哈希。"""
+    user = current_user(request)
+    if user is None:
+        return {"success": False, "error": "请先登录"}
+    code = store.issue_recovery_code(user["user_id"])
+    return {"success": True, "code": code}
+
+@app.post("/api/recovery/redeem")
+async def redeem_recovery(req: RecoveryRequest, request: Request, response: Response):
+    """在新设备上用恢复码登录回原账号。"""
+    now = time.time()
+    account = store.redeem_recovery_code(req.code)
+    if account is None:
+        return {"success": False, "error": "恢复码无效"}
+    if account["username"] in active_users:
+        return {"success": False, "error": "该账号当前已在线"}
+    store.touch_login(account["user_id"], now)
+    store.delete_session(request.cookies.get(SESSION_COOKIE))
+    token = store.create_session(account["user_id"], now)
+    set_session_cookie(response, request, token)
+    return {"success": True, **public_user(account)}
 
 @app.websocket("/ws/session/{username}")
 async def session_websocket(websocket: WebSocket, username: str):
+    # 路径里的用户名不再被信任，必须与 cookie 里的会话一致
+    user = ws_user(websocket)
+    if user is None or user["username"].lower() != username.lower():
+        await websocket.close(code=1008, reason="未登录或身份不匹配")
+        return
+    username = user["username"]
     await websocket.accept()
     active_users.add(username)
     if username in disconnected_users:
@@ -192,27 +269,36 @@ async def get_users():
     return {"users": list(active_users), "count": len(active_users)}
 
 @app.get("/api/chips/{username}")
-async def get_chips(username: str):
-    purge_expired_accounts()
-    return {"global_chips": get_global_chips(username)}
+async def get_chips(username: str, request: Request):
+    # 只允许查自己的筹码；未登录时返回 null 而不是 0，
+    # 避免前端把「查不到」误显示成「筹码为 0」而禁用建桌/入座
+    user = current_user(request)
+    if user is None or user["username"].lower() != username.lower():
+        return {"success": False, "global_chips": None}
+    return {"success": True, "global_chips": int(user["global_chips"])}
 
 class JoinTableRequest(BaseModel):
-    username: str
+    username: str = ""
 
 @app.post("/api/tables/join/{table_id}")
-async def join_table(table_id: str, req: JoinTableRequest):
+async def join_table(table_id: str, req: JoinTableRequest, request: Request):
+    # 花的是谁的筹码由会话决定，不看请求体，避免替别人扣费
+    user = current_user(request)
+    if user is None:
+        return {"success": False, "error": "登录已过期，请重新登录"}
+    username = user["username"]
+
     if table_id not in tables:
         return {"success": False, "error": "该牌桌不存在"}
-    if any(p.id == req.username for p in tables[table_id].players):
-        return {"success": True, "global_chips": get_global_chips(req.username)}
+    if any(p.id == username for p in tables[table_id].players):
+        return {"success": True, "global_chips": get_global_chips(username)}
     if len(tables[table_id].players) >= MAX_TABLE_PLAYERS:
         return {"success": False, "error": "该牌桌已满（最多 8 人）"}
-    account = ensure_account(req.username)
-    chips = int(account["global_chips"])
+    chips = int(user["global_chips"])
     if chips < 1:
         return {"success": False, "error": "全局筹码不足！需要至少 1 枚全局筹码才能入座"}
-    set_global_chips(req.username, chips - 1)
-    return {"success": True, "global_chips": get_global_chips(req.username)}
+    store.set_chips(user["user_id"], chips - 1)
+    return {"success": True, "global_chips": get_global_chips(username)}
 
 @app.get("/api/tables")
 async def get_tables():
@@ -227,14 +313,17 @@ async def get_tables():
     return result
 
 @app.post("/api/tables")
-async def create_table(req: CreateTableRequest):
-    if req.username:
-        account = ensure_account(req.username)
-        chips = int(account["global_chips"])
-        if chips < 1:
-            return {"success": False, "error": "全局筹码不足！需要至少 1 枚全局筹码才能建桌"}
-        set_global_chips(req.username, chips - 1)
-    
+async def create_table(req: CreateTableRequest, request: Request):
+    # 同上：建桌扣的是会话对应账号的筹码
+    user = current_user(request)
+    if user is None:
+        return {"success": False, "error": "登录已过期，请重新登录"}
+    username = user["username"]
+    chips = int(user["global_chips"])
+    if chips < 1:
+        return {"success": False, "error": "全局筹码不足！需要至少 1 枚全局筹码才能建桌"}
+    store.set_chips(user["user_id"], chips - 1)
+
     tid = str(uuid.uuid4())[:8]
     tables[tid] = GameState(
         table_id=tid, 
@@ -244,7 +333,7 @@ async def create_table(req: CreateTableRequest):
         min_raise=req.big_blind
     )
     decks[tid] = Deck()
-    return {"success": True, "table_id": tid, "global_chips": get_global_chips(req.username)}
+    return {"success": True, "table_id": tid, "global_chips": get_global_chips(username)}
 
 async def execute_leave_cleanup(table_id: str, client_id: str, cb):
     if table_id not in tables:
@@ -254,11 +343,10 @@ async def execute_leave_cleanup(table_id: str, client_id: str, cb):
     
     leaving_player = next((p for p in global_game_state.players if p.id == client_id), None)
     if leaving_player:
-        account = ensure_account(client_id)
         buy_in_unit = max(1, int(global_game_state.buy_in))
         earned = math.floor(leaving_player.chips / buy_in_unit)
-        account["global_chips"] = int(account["global_chips"]) + earned
-        save_accounts()
+        if earned:
+            add_global_chips(client_id, earned)
 
     if leaving_player:
         leaving_player.is_ready = False
@@ -279,10 +367,17 @@ async def execute_leave_cleanup(table_id: str, client_id: str, cb):
 
 @app.websocket("/ws/{table_id}/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, table_id: str, client_id: str):
+    # 牌桌身份同样以会话为准，避免伪造 client_id 冒充他人行动
+    user = ws_user(websocket)
+    if user is None or user["username"].lower() != client_id.lower():
+        await websocket.close(code=1008, reason="未登录或身份不匹配")
+        return
+    client_id = user["username"]
+
     if table_id not in tables:
         await websocket.close()
         return
-        
+
     global_game_state = tables[table_id]
     global_deck = decks[table_id]
 
